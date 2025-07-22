@@ -32,4 +32,3 @@ class MeineSensor(SensorEntity):
     @property
     def native_value(self):
         return 42
-
