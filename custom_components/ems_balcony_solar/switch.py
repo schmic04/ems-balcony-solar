@@ -2,6 +2,7 @@ from homeassistant.components.switch import SwitchEntity
 from homeassistant.helpers.device_registry import DeviceInfo
 from .const import DOMAIN, MANUFACTURER
 
+
 async def async_setup_entry(hass, entry, async_add_entities):
     for i in range(2):
         device_id = f"switch_device_{i}"
@@ -9,6 +10,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
         for j in range(2):
             switches.append(MeinSwitch(f"Switch {j}", device_id, entry))
         async_add_entities(switches)
+
 
 class MeinSwitch(SwitchEntity):
     def __init__(self, name, device_id, entry):
@@ -39,3 +41,4 @@ class MeinSwitch(SwitchEntity):
             model="Switch-Modell Y",
             via_device=(DOMAIN, self._entry.entry_id),
         )
+

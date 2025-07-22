@@ -2,12 +2,15 @@ from homeassistant import config_entries
 import voluptuous as vol
 from .const import DOMAIN
 
+
 class MeineIntegrationConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     async def async_step_user(self, user_input=None):
         if user_input is not None:
-            return self.async_create_entry(title="Meine Integration", data=user_input)
+            return self.async_create_entry(
+                    title="EMS Balcony Solar", data=user_input
+                    )
 
         schema = vol.Schema({
             vol.Required("host"): str,
