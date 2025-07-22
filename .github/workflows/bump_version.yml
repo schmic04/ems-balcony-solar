@@ -19,7 +19,7 @@ jobs:
 
       - name: Bump version in manifest.json
         run: |
-          FILE=custom_components/meine_integration/manifest.json
+          FILE=custom_components/ems_balcony_solar/manifest.json
           VERSION=$(jq -r '.version' $FILE)
           IFS='.' read -r -a parts <<< "$VERSION"
           PATCH=$((parts[2]+1))
@@ -30,7 +30,7 @@ jobs:
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-          git add custom_components/meine_integration/manifest.json
+          git add custom_components/ems_balcony_solar/manifest.json
           git commit -m "Bump version to $NEW_VERSION"
           git push
         env:

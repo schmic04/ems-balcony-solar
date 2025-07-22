@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - "custom_components/meine_integration/manifest.json"
+      - "custom_components/ems_balcony_solar/manifest.json"
 
 jobs:
   create_release:
@@ -17,7 +17,7 @@ jobs:
       - name: Read version
         id: version
         run: |
-          VERSION=$(jq -r .version custom_components/meine_integration/manifest.json)
+          VERSION=$(jq -r .version custom_components/ems_balcony_solar/manifest.json)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
