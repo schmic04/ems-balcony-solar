@@ -1,0 +1,9 @@
+{
+  "domain": "ems_balcony_solar",
+  "name": "EMS Balcony Solar",
+  "version": "1.0.0",
+  "documentation": "https://github.com/schmic04/ems-balcony-solar.git",
+  "dependencies": [],
+  "codeowners": ["@schmic04"],
+  "requirements": []
+}
