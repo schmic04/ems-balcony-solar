@@ -41,4 +41,3 @@ class MeinSwitch(SwitchEntity):
             model="Switch-Modell Y",
             via_device=(DOMAIN, self._entry.entry_id),
         )
-
