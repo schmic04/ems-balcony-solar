@@ -1,0 +1,37 @@
+name: Bump Version After PR Merge
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  bump_version:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Bump version in manifest.json
+        run: |
+          FILE=custom_components/ems_balcony_solar/manifest.json
+          VERSION=$(jq -r '.version' $FILE)
+          IFS='.' read -r -a parts <<< "$VERSION"
+          PATCH=$((parts[2]+1))
+          NEW_VERSION="${parts[0]}.${parts[1]}.$PATCH"
+          jq --arg v "$NEW_VERSION" '.version = $v' $FILE > tmp.$$.json && mv tmp.$$.json $FILE
+
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add custom_components/ems_balcony_solar/manifest.json
+          git commit -m "Bump version to $NEW_VERSION"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

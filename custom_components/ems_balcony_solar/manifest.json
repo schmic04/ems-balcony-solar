@@ -1,0 +1,16 @@
+{
+  "domain": "ems_balcony_solar",
+  "name": "EMS Balcony Solar",
+  "codeowners": [
+    "@schmic04"
+  ],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/schmic04/ems-balcony-solar.git",
+  "homekit": {},
+  "iot_class": "local_polling",
+  "quality_scale": "internal",
+  "requirements": [],
+  "ssdp": [],
+  "zeroconf": []
+}

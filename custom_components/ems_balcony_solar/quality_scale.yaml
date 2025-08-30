@@ -1,0 +1,6 @@
+quality_scale:
+  - name: "Quality Scale"
+    description: "This integration is in a development state."
+    level: "HACS"
+    stability: "Stable"
+    support: "Community Support"

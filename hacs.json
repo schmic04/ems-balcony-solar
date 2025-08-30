@@ -1,0 +1,14 @@
+{
+  "name": "EMS Balcony Solar",
+  "integration_type": "plugin",
+  "domain": "ems_balcony_solar",
+  "version": "1.0.0",
+  "description": "Integration for monitoring and controlling EMS Balcony Solar systems.",
+  "documentation": "https://github.com/schmic04/ems_balcony_solar",
+  "issue_tracker": "https://github.com/schmic04/ems_balcony_solar/issues",
+  "homepage": "https://github.com/schmic04/ems_balcony_solar",
+  "requirements": [],
+  "dependencies": [],
+  "codeowners": ["@schmic04"],
+  "quality_scale": "internal"
+}

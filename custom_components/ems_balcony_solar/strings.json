@@ -1,0 +1,20 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "EMS Balcony Solar",
+        "description": "Configure EMS Balcony Solar integration",
+        "data": {
+          "nordpool_sensor": "Nordpool Price Sensor",
+          "window_sensor": "Window Size (input_number)",
+          "hours_of_operating": "Hours of Operating (input_number)"
+        }
+      }
+    },
+    "error": {
+      "entity_not_found": "Selected entity does not exist",
+      "invalid_window_value": "Window value must be at least 1",
+      "invalid_hours_of_operating": "Hours of operating must be at least 1"
+    }
+  }
+}
