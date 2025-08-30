@@ -1,19 +1,31 @@
 """EMS Balcony Solar binary sensor platform."""
 
 from __future__ import annotations
+
+from collections.abc import Callable
 from datetime import datetime
 import logging
 
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
-from homeassistant.core import Event, HomeAssistant, callback
+from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.event import async_track_state_change_event, async_track_time_change
+
+# from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.event import (
+    async_track_state_change_event,
+    async_track_time_change,
+)
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, CONF_NORDPOOL_SENSOR, CONF_HOURS_OF_OPERATING, DEFAULT_HOURS_OF_OPERATING
+from .const import (
+    CONF_HOURS_OF_OPERATING,
+    CONF_NORDPOOL_SENSOR,
+    DEFAULT_HOURS_OF_OPERATING,
+    DOMAIN,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -21,20 +33,21 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
+    # async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up EMS Balcony Solar binary sensors from a config entry."""
     nordpool_sensor = entry.data[CONF_NORDPOOL_SENSOR]
     hours_of_operating_sensor = entry.data[CONF_HOURS_OF_OPERATING]
 
     sensors = [
-        EmsBalconySolarCurrentHourBinarySensor(nordpool_sensor, hours_of_operating_sensor),
+        EmsBalconySolarBinarySensor(nordpool_sensor, hours_of_operating_sensor),
     ]
 
     async_add_entities(sensors)
 
 
-class EmsBalconySolarCurrentHourBinarySensor(BinarySensorEntity):
+class EmsBalconySolarBinarySensor(BinarySensorEntity):
     """Binary sensor that indicates if current hour is in optimal sublists."""
 
     _attr_has_entity_name = True
@@ -51,7 +64,7 @@ class EmsBalconySolarCurrentHourBinarySensor(BinarySensorEntity):
             manufacturer="EMS",
             model="Balcony Solar",
         )
-        self._unsubscribe_callbacks: list = []
+        self._unsubscribe_callbacks: list[Callable[[], None]] = []
 
     def _get_hours_of_operating_value(self) -> int:
         """Get the hours of operating value from sensor or default."""
@@ -64,7 +77,9 @@ class EmsBalconySolarCurrentHourBinarySensor(BinarySensorEntity):
             hours_value = int(float(hours_state.state))
             return max(1, hours_value)
         except (ValueError, TypeError):
-            _LOGGER.debug("Invalid hours of operating sensor value: %s", hours_state.state)
+            _LOGGER.debug(
+                "Invalid hours of operating sensor value: %s", hours_state.state
+            )
             return DEFAULT_HOURS_OF_OPERATING
 
     def _get_num_price_sublists_sensor(self) -> str:
@@ -102,11 +117,10 @@ class EmsBalconySolarCurrentHourBinarySensor(BinarySensorEntity):
     async def async_will_remove_from_hass(self) -> None:
         """Run when entity will be removed from hass."""
         for unsubscribe in self._unsubscribe_callbacks:
-            if unsubscribe:
-                unsubscribe()
+            unsubscribe()
 
     @callback
-    def _handle_sensor_state_change(self, event: Event) -> None:
+    def _handle_sensor_state_change(self, event: Event[EventStateChangedData]) -> None:
         """Handle state changes of the input sensors."""
         self.hass.async_create_task(self._update_state())
 
@@ -160,17 +174,17 @@ class EmsBalconySolarCurrentHourBinarySensor(BinarySensorEntity):
                 return
 
             # Create list of (sum, index_list) pairs and sort by sum (descending for highest prices)
-            sum_index_pairs = list(zip(sublist_sums, index_lists))
+            sum_index_pairs = list(zip(sublist_sums, index_lists, strict=False))
             sum_index_pairs.sort(key=lambda x: x[0], reverse=True)
 
             # Select sublists based on total duration not exceeding hours_of_operating
             hours_of_operating = self._get_hours_of_operating_value()
-            best_sublists = []
+            best_sublists: list[tuple[float, list[int]]] = []
             total_duration = 0
-            
+
             for sum_value, index_list in sum_index_pairs:
                 sublist_duration = len(index_list)
-                
+
                 # If adding this sublist would exceed the limit, check if we should still add it
                 if total_duration + sublist_duration > hours_of_operating:
                     # If we haven't selected any sublists yet, or if this would be the first to exceed,
@@ -179,14 +193,13 @@ class EmsBalconySolarCurrentHourBinarySensor(BinarySensorEntity):
                         best_sublists.append((sum_value, index_list))
                         total_duration += sublist_duration
                     break
-                else:
-                    # Safe to add without exceeding limit
-                    best_sublists.append((sum_value, index_list))
-                    total_duration += sublist_duration
-                    
-                    # If we've reached the exact target, stop
-                    if total_duration >= hours_of_operating:
-                        break
+                # Safe to add without exceeding limit
+                best_sublists.append((sum_value, index_list))
+                total_duration += sublist_duration
+
+                # If we've reached the exact target, stop
+                if total_duration >= hours_of_operating:
+                    break
 
             # Get all indices from the selected sublists
             optimal_indices = []
@@ -233,9 +246,9 @@ class EmsBalconySolarCurrentHourBinarySensor(BinarySensorEntity):
         num_sublists_sensor_id = self._get_num_price_sublists_sensor()
         num_sublists_state = self.hass.states.get(num_sublists_sensor_id)
 
-        return (
-            num_sublists_state is not None
-            and num_sublists_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN)
+        return num_sublists_state is not None and num_sublists_state.state not in (
+            STATE_UNAVAILABLE,
+            STATE_UNKNOWN,
         )
 
     @property

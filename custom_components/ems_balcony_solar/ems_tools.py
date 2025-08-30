@@ -12,6 +12,7 @@ def is_local_maximum(price_list: list[float], index: int) -> bool:
 
     Returns:
         True if value at index is a local maximum
+
     """
     if index <= 0 or index >= len(price_list) - 1:
         return False
@@ -32,6 +33,7 @@ def sort_sublists_by_sum(
 
     Returns:
         Sorted list of sublists
+
     """
     return sorted(sublists, key=sum, reverse=descending)
 
@@ -49,6 +51,7 @@ def dynamic_sublists_with_window(
         Tuple containing:
         - List of sublists with price values (max length = window)
         - List of corresponding index lists from original price_list
+
     """
     if not price_list:
         return [], []
@@ -61,11 +64,10 @@ def dynamic_sublists_with_window(
     index_lists = []
     used_indices = set()
 
-    for i in range(len(price_list)):
+    for i, current_value in enumerate(price_list):
         if i in used_indices:
             continue
 
-        current_value = price_list[i]
         prev_value = price_list[i - 1] if i > 0 else None
         next_value = price_list[i + 1] if i < len(price_list) - 1 else None
 
@@ -203,13 +205,6 @@ if __name__ == "__main__":
         8.53,
     ]
 
-    sublists, indices = dynamic_sublists_with_window(test_list, window=8)
-    sorted_sublists = sort_sublists_by_sum(sublists)
+    window_sublists, indices = dynamic_sublists_with_window(test_list, window=8)
+    sorted_sublists = sort_sublists_by_sum(window_sublists)
     average = sum(test_list) / len(test_list)
-
-    print("\nOriginal list:")
-    print(test_list)
-    print(f"\nSublists: {sublists}")
-    print(f"Indices: {indices}")
-    print(f"\nSorted sublists by sum: {sorted_sublists}")
-    print(f"Average: {average:.2f}")

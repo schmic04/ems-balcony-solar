@@ -1,23 +1,29 @@
 """EMS Balcony Solar sensor platform."""
 
 from __future__ import annotations
+
+from collections.abc import Callable
+from datetime import date
+from decimal import Decimal
 import logging
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
-from homeassistant.core import Event, HomeAssistant, callback
+from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
+# from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event
 
 from .const import (
-    DOMAIN,
+    CONF_HOURS_OF_OPERATING,
     CONF_NORDPOOL_SENSOR,
     CONF_WINDOW_SENSOR,
-    CONF_HOURS_OF_OPERATING,
-    DEFAULT_WINDOW,
     DEFAULT_HOURS_OF_OPERATING,
+    DEFAULT_WINDOW,
+    DOMAIN,
 )
 from .ems_tools import dynamic_sublists_with_window
 
@@ -27,7 +33,8 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
+    # async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up EMS Balcony Solar sensors from a config entry."""
     nordpool_sensor = entry.data[CONF_NORDPOOL_SENSOR]
@@ -36,10 +43,18 @@ async def async_setup_entry(
 
     sensors = [
         EmsBalconySolarSensor(
-            nordpool_sensor, window_sensor, hours_of_operating_sensor, "price_avg", "Price Average"
+            nordpool_sensor,
+            window_sensor,
+            hours_of_operating_sensor,
+            "price_avg",
+            "Price Average",
         ),
         EmsBalconySolarSensor(
-            nordpool_sensor, window_sensor, hours_of_operating_sensor, "price_list_length", "Price List Length"
+            nordpool_sensor,
+            window_sensor,
+            hours_of_operating_sensor,
+            "price_list_length",
+            "Price List Length",
         ),
         EmsBalconySolarSensor(
             nordpool_sensor,
@@ -59,12 +74,12 @@ class EmsBalconySolarSensor(SensorEntity):
     _attr_has_entity_name = True
 
     def __init__(
-        self, 
-        nordpool_sensor: str, 
-        window_sensor: str, 
+        self,
+        nordpool_sensor: str,
+        window_sensor: str,
         hours_of_operating_sensor: str,
-        sensor_type: str, 
-        name: str
+        sensor_type: str,
+        name: str,
     ) -> None:
         """Initialize the sensor."""
         self._nordpool_sensor = nordpool_sensor
@@ -79,7 +94,7 @@ class EmsBalconySolarSensor(SensorEntity):
             manufacturer="EMS",
             model="Balcony Solar",
         )
-        self._unsubscribe_callback = None
+        self._unsubscribe_callback: Callable[[], None] | None = None
 
     async def async_added_to_hass(self) -> None:
         """Run when entity about to be added to hass."""
@@ -88,7 +103,11 @@ class EmsBalconySolarSensor(SensorEntity):
         # Track nordpool, window and hours of operating sensor changes
         self._unsubscribe_callback = async_track_state_change_event(
             self.hass,
-            [self._nordpool_sensor, self._window_sensor, self._hours_of_operating_sensor],
+            [
+                self._nordpool_sensor,
+                self._window_sensor,
+                self._hours_of_operating_sensor,
+            ],
             self._handle_sensor_state_change,
         )
 
@@ -100,17 +119,17 @@ class EmsBalconySolarSensor(SensorEntity):
             self._unsubscribe_callback()
 
     @callback
-    def _handle_sensor_state_change(self, event: Event) -> None:
+    def _handle_sensor_state_change(self, event: Event[EventStateChangedData]) -> None:
         """Handle state changes of the input sensors."""
         self.hass.async_create_task(self._update_from_sensors())
 
     def _get_window_value(self) -> int:
         """Get the window value from window sensor or default."""
         window_state = self.hass.states.get(self._window_sensor)
-        
+
         if not window_state or window_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
             return DEFAULT_WINDOW
-            
+
         try:
             window_value = int(float(window_state.state))
             return max(1, window_value)
@@ -121,15 +140,17 @@ class EmsBalconySolarSensor(SensorEntity):
     def _get_hours_of_operating_value(self) -> int:
         """Get the hours of operating value from sensor or default."""
         hours_state = self.hass.states.get(self._hours_of_operating_sensor)
-        
+
         if not hours_state or hours_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
             return DEFAULT_HOURS_OF_OPERATING
-            
+
         try:
             hours_value = int(float(hours_state.state))
             return max(1, hours_value)
         except (ValueError, TypeError):
-            _LOGGER.debug("Invalid hours of operating sensor value: %s", hours_state.state)
+            _LOGGER.debug(
+                "Invalid hours of operating sensor value: %s", hours_state.state
+            )
             return DEFAULT_HOURS_OF_OPERATING
 
     async def _update_from_sensors(self) -> None:
@@ -238,12 +259,12 @@ class EmsBalconySolarSensor(SensorEntity):
         """Return if entity is available."""
         nordpool_state = self.hass.states.get(self._nordpool_sensor)
 
-        return (
-            nordpool_state is not None
-            and nordpool_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN)
+        return nordpool_state is not None and nordpool_state.state not in (
+            STATE_UNAVAILABLE,
+            STATE_UNKNOWN,
         )
 
     @property
-    def native_value(self) -> float | str | None:
+    def native_value(self) -> str | int | float | date | Decimal | None:
         """Return the state of the sensor."""
         return self._attr_native_value
