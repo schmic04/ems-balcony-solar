@@ -4,58 +4,19 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from homeassistant.components.binary_sensor import (
-    BinarySensorDeviceClass,
-    BinarySensorEntity,
-    BinarySensorEntityDescription,
-)
-
-from .entity import EMSBalconySolarEntity
-
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-    from .coordinator import EMSBalconySolarDataUpdateCoordinator
     from .data import EMSBalconySolarConfigEntry
-
-ENTITY_DESCRIPTIONS = (
-    BinarySensorEntityDescription(
-        key="ems_balcony_solar",
-        name="EMS Balcony Solar Binary Sensor",
-        device_class=BinarySensorDeviceClass.CONNECTIVITY,
-    ),
-)
 
 
 async def async_setup_entry(
-    hass: HomeAssistant,  # noqa: ARG001 Unused function argument: `hass`
+    hass: HomeAssistant,
     entry: EMSBalconySolarConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the binary_sensor platform."""
-    async_add_entities(
-        EMSBalconySolarBinarySensor(
-            coordinator=entry.runtime_data.coordinator,
-            entity_description=entity_description,
-        )
-        for entity_description in ENTITY_DESCRIPTIONS
-    )
+    # No binary sensors to add - this platform is kept for future use
+    _ = hass, entry, async_add_entities  # Mark as used to avoid linter warnings
 
-
-class EMSBalconySolarBinarySensor(EMSBalconySolarEntity, BinarySensorEntity):
-    """ems_balcony_solar binary_sensor class."""
-
-    def __init__(
-        self,
-        coordinator: EMSBalconySolarDataUpdateCoordinator,
-        entity_description: BinarySensorEntityDescription,
-    ) -> None:
-        """Initialize the binary_sensor class."""
-        super().__init__(coordinator)
-        self.entity_description = entity_description
-
-    @property
-    def is_on(self) -> bool:
-        """Return true if the binary_sensor is on."""
-        return self.coordinator.data.get("title", "") == "foo"

@@ -2,17 +2,23 @@
     "config": {
         "step": {
             "user": {
-                "description": "If you need help with the configuration have a look here: https://github.com/schmic04/ems_balcony_solar",
+                "description": "Configure your EMS Balcony Solar integration. All fields are optional.",
                 "data": {
-                    "username": "Username",
-                    "password": "Password"
+                    "sensor": "Sensor",
+                    "number_1": "Number Entity 1",
+                    "number_2": "Number Entity 2"
+                },
+                "data_description": {
+                    "sensor": "Select a sensor from your Home Assistant instance",
+                    "number_1": "Select a number entity from your Home Assistant instance",
+                    "number_2": "Select a number entity from your Home Assistant instance"
                 }
             }
         },
         "error": {
-            "auth": "Username/Password is wrong.",
             "connection": "Unable to connect to the server.",
-            "unknown": "Unknown error occurred."
+            "unknown": "Unknown error occurred.",
+            "missing_attributes": "The selected sensor is missing required attributes (today, tomorrow, tomorrow_valid). Please select a valid price sensor."
         },
         "abort": {
             "already_configured": "This entry is already configured."

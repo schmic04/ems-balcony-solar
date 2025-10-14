@@ -25,4 +25,5 @@ class EMSBalconySolarEntity(CoordinatorEntity[EMSBalconySolarDataUpdateCoordinat
                     coordinator.config_entry.entry_id,
                 ),
             },
+            name="EMS Balcony Solar",
         )
