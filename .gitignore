@@ -9,6 +9,7 @@ __pycache__
 # misc
 .coverage
 .vscode
+*.code-workspace
 coverage.xml
 .ruff_cache
 
