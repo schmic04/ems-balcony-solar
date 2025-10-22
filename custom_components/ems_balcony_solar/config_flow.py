@@ -12,7 +12,13 @@ from .api import (
     EMSBalconySolarApiClientCommunicationError,
     EMSBalconySolarApiClientError,
 )
-from .const import CONF_NUMBER_1, CONF_NUMBER_2, CONF_SENSOR, DOMAIN, LOGGER
+from .const import (
+    CONF_NUMBER_OF_SUBLISTS,
+    CONF_SENSOR,
+    CONF_SUBLIST_LENGTH,
+    DOMAIN,
+    LOGGER,
+)
 
 
 class EMSBalconySolarFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
@@ -60,16 +66,20 @@ class EMSBalconySolarFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                         ),
                     ),
                     vol.Optional(
-                        CONF_NUMBER_1,
-                        default=(user_input or {}).get(CONF_NUMBER_1, vol.UNDEFINED),
+                        CONF_SUBLIST_LENGTH,
+                        default=(user_input or {}).get(
+                            CONF_SUBLIST_LENGTH, vol.UNDEFINED
+                        ),
                     ): selector.EntitySelector(
                         selector.EntitySelectorConfig(
                             domain="number",
                         ),
                     ),
                     vol.Optional(
-                        CONF_NUMBER_2,
-                        default=(user_input or {}).get(CONF_NUMBER_2, vol.UNDEFINED),
+                        CONF_NUMBER_OF_SUBLISTS,
+                        default=(user_input or {}).get(
+                            CONF_NUMBER_OF_SUBLISTS, vol.UNDEFINED
+                        ),
                     ): selector.EntitySelector(
                         selector.EntitySelectorConfig(
                             domain="number",
