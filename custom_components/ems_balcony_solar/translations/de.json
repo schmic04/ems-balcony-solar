@@ -23,5 +23,12 @@
         "abort": {
             "already_configured": "Dieser Eintrag ist bereits konfiguriert."
         }
+    },
+    "entity": {
+        "binary_sensor": {
+            "price_range_active": {
+                "name": "Preisbereich aktiv"
+            }
+        }
     }
 }

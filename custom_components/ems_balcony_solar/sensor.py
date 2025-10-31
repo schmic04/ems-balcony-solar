@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING
 
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.core import Event, EventStateChangedData, callback
-from homeassistant.helpers.entity_registry import async_get as async_get_entity_registry
 from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_NUMBER_OF_SUBLISTS,
@@ -84,58 +84,26 @@ class EMSBalconySolarSensor(EMSBalconySolarEntity, SensorEntity):
         """Run when entity about to be added to hass."""
         await super().async_added_to_hass()
 
-        # Find entity IDs via entity registry
-        entity_registry = async_get_entity_registry(self.hass)
+        # Use predictable entity IDs instead of searching entity registry
+        # This avoids blocking during initialization
 
-        # Search for the switch entity
-        switch_unique_id = f"{self._entry.entry_id}_ems_balcony_solar"
-        for entity_id, entry in entity_registry.entities.items():
-            if entry.unique_id == switch_unique_id:
-                self._switch_entity_id = entity_id
-                break
+        # Debugging switch will be found dynamically if needed
+        self._debugging_switch_entity_id = "switch.debugging"
 
-        if not self._switch_entity_id:
-            _LOGGER.warning(
-                "Could not find switch entity with unique_id: %s",
-                switch_unique_id,
-            )
-
-        # Search for the debugging switch entity
-        debugging_switch_unique_id = f"{self._entry.entry_id}_debugging"
-        for entity_id, entry in entity_registry.entities.items():
-            if entry.unique_id == debugging_switch_unique_id:
-                self._debugging_switch_entity_id = entity_id
-                break
-
-        if not self._debugging_switch_entity_id:
-            _LOGGER.warning(
-                "Could not find debugging switch entity with unique_id: %s",
-                debugging_switch_unique_id,
-            )
-
-        # Search for sublist_length entity
+        # Try to get number entities from config, otherwise use predictable IDs
         sublist_length_entity = self._entry.data.get(CONF_SUBLIST_LENGTH)
         if sublist_length_entity:
             self._sublist_length_entity_id = sublist_length_entity
         else:
-            # Look for created sublist_length
-            sublist_length_unique_id = f"{self._entry.entry_id}_sublist_length"
-            for entity_id, entry in entity_registry.entities.items():
-                if entry.unique_id == sublist_length_unique_id:
-                    self._sublist_length_entity_id = entity_id
-                    break
+            # Use predictable entity_id
+            self._sublist_length_entity_id = "number.sublist_length"
 
-        # Search for number_of_sublists entity
         number_of_sublists_entity = self._entry.data.get(CONF_NUMBER_OF_SUBLISTS)
         if number_of_sublists_entity:
             self._number_of_sublists_entity_id = number_of_sublists_entity
         else:
-            # Look for created number_of_sublists
-            number_of_sublists_unique_id = f"{self._entry.entry_id}_number_of_sublists"
-            for entity_id, entry in entity_registry.entities.items():
-                if entry.unique_id == number_of_sublists_unique_id:
-                    self._number_of_sublists_entity_id = entity_id
-                    break
+            # Use predictable entity_id
+            self._number_of_sublists_entity_id = "number.number_of_sublists"
 
         # Track state changes of the source sensor
         if self._source_entity_id:
@@ -145,13 +113,13 @@ class EMSBalconySolarSensor(EMSBalconySolarEntity, SensorEntity):
                 self._handle_source_state_change,
             )
 
-        # Track state changes of the switch
-        if self._switch_entity_id:
-            self._unsub_switch_change = async_track_state_change_event(
-                self.hass,
-                [self._switch_entity_id],
-                self._handle_switch_state_change,
-            )
+        # Track state changes of the switch (use common entity_id pattern)
+        potential_switch_id = "switch.ems_balcony_solar"
+        self._unsub_switch_change = async_track_state_change_event(
+            self.hass,
+            [potential_switch_id],
+            self._handle_switch_state_change,
+        )
 
         # Track state changes of sublist_length
         if self._sublist_length_entity_id:
@@ -169,9 +137,10 @@ class EMSBalconySolarSensor(EMSBalconySolarEntity, SensorEntity):
                 self._handle_number_state_change,
             )
 
-        # Perform initial update if switch is on
-        if self._is_switch_on():
-            self._update_sensor("initial setup")
+        # Perform initial update
+        # Note: Don't check switch state here to avoid blocking during initialization
+        # The switch check will happen in the property getters
+        self._update_sensor("initial setup")
 
     async def async_will_remove_from_hass(self) -> None:
         """Run when entity will be removed from hass."""
@@ -206,9 +175,12 @@ class EMSBalconySolarSensor(EMSBalconySolarEntity, SensorEntity):
         """Handle state changes of the switch."""
         new_state = event.data.get("new_state")
 
-        # If switch was turned on, update the sensor
-        if new_state and new_state.state == "on":
-            self._update_sensor("switch turned on")
+        # Update sensor whenever switch state changes (on or off)
+        if new_state:
+            if new_state.state == "on":
+                self._update_sensor("switch turned on")
+            else:
+                self._update_sensor("switch turned off")
 
     @callback
     def _handle_number_state_change(self, event: Event[EventStateChangedData]) -> None:
@@ -223,9 +195,23 @@ class EMSBalconySolarSensor(EMSBalconySolarEntity, SensorEntity):
         self.async_write_ha_state()
 
     def _is_switch_on(self) -> bool:
-        """Check if the switch is on."""
+        """
+        Check if the switch is on.
+
+        Dynamically finds the switch entity if not yet set.
+        """
+        # Try to find switch if not yet found
         if not self._switch_entity_id:
-            return False
+            # Simple approach: Try common entity_id pattern
+            potential_id = "switch.ems_balcony_solar"
+            if self.hass.states.get(potential_id):
+                self._switch_entity_id = potential_id
+                _LOGGER.debug("Found switch entity: %s", self._switch_entity_id)
+
+        # Check switch state (default to True if not found yet)
+        if not self._switch_entity_id:
+            return True
+
         switch_state = self.hass.states.get(self._switch_entity_id)
         return switch_state is not None and switch_state.state == "on"
 
@@ -240,6 +226,10 @@ class EMSBalconySolarSensor(EMSBalconySolarEntity, SensorEntity):
     @property
     def native_value(self) -> float | None:
         """Return the native value of the sensor."""
+        # If switch is off, return None
+        if not self._is_switch_on():
+            return None
+
         if self._source_entity_id:
             # Get the value from the source sensor
             state = self.hass.states.get(self._source_entity_id)
@@ -257,18 +247,28 @@ class EMSBalconySolarSensor(EMSBalconySolarEntity, SensorEntity):
         """Return the state attributes."""
         attributes = {}
 
+        # Add last_update timestamp for reference_date calculation
+        attributes["last_update"] = dt_util.now().isoformat()
+
+        # If switch is off, return empty/default attributes
+        if not self._is_switch_on():
+            attributes["price_list"] = []
+            attributes["price_list_count"] = 0
+            attributes["price_sublists"] = []
+            attributes["price_sublists_count"] = 0
+            attributes["price_sublists_indices"] = []
+            attributes["price_sublists_time_ranges"] = []
+            attributes["hourly_prices"] = []
+            attributes["hourly_prices_count"] = 0
+            return attributes
+
         if self._source_entity_id:
             # Get combined price list from the source sensor
             price_list = get_combined_price_list(self.hass, self._source_entity_id)
             attributes["price_list"] = price_list
             attributes["price_list_count"] = len(price_list)
 
-            # Group prices by hour for easier hour-based access
-            hourly_prices = group_prices_by_hour(price_list)
-            attributes["hourly_prices"] = hourly_prices
-            attributes["hourly_prices_count"] = len(hourly_prices)
-
-            # Split price list into sublists based on sublist_length and number_of_sublists
+            # Split price list into sublists
             sublist_length = self._get_number_value(self._sublist_length_entity_id)
             number_of_sublists = self._get_number_value(
                 self._number_of_sublists_entity_id
@@ -284,21 +284,27 @@ class EMSBalconySolarSensor(EMSBalconySolarEntity, SensorEntity):
                 # Convert indices to time ranges
                 time_ranges = convert_indices_to_time_ranges(indices)
                 attributes["price_sublists_time_ranges"] = time_ranges
+                # Group prices by hour for easier hour-based access
+                hourly_prices = group_prices_by_hour(price_list)
+                attributes["hourly_prices"] = hourly_prices
+                attributes["hourly_prices_count"] = len(hourly_prices)
+
             else:
                 attributes["price_sublists"] = []
                 attributes["price_sublists_count"] = 0
                 attributes["price_sublists_indices"] = []
                 attributes["price_sublists_time_ranges"] = []
-                attributes["price_sublists_indices"] = []
+                attributes["hourly_prices"] = []
+                attributes["hourly_prices_count"] = 0
         else:
             attributes["price_list"] = []
             attributes["price_list_count"] = 0
-            attributes["hourly_prices"] = []
-            attributes["hourly_prices_count"] = 0
             attributes["price_sublists"] = []
             attributes["price_sublists_count"] = 0
             attributes["price_sublists_indices"] = []
             attributes["price_sublists_time_ranges"] = []
+            attributes["hourly_prices"] = []
+            attributes["hourly_prices_count"] = 0
 
         return attributes
 

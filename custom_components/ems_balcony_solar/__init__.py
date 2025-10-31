@@ -25,10 +25,10 @@ if TYPE_CHECKING:
     from .data import EMSBalconySolarConfigEntry
 
 PLATFORMS: list[Platform] = [
-    Platform.SENSOR,
     Platform.BINARY_SENSOR,
-    Platform.SWITCH,
     Platform.NUMBER,
+    Platform.SENSOR,
+    Platform.SWITCH,
 ]
 
 

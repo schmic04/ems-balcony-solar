@@ -179,6 +179,8 @@ def find_local_maxima(price_list: list) -> list[int]:
     """Find indices of local maxima in the price list.
 
     A local maximum is a value that is greater than both its neighbors.
+    Edge cases (first and last element) are also considered maxima if they
+    are greater than their single neighbor.
 
     Args:
         price_list: The input price list.
@@ -187,13 +189,26 @@ def find_local_maxima(price_list: list) -> list[int]:
         List of indices where local maxima occur.
 
     """
-    if not price_list or len(price_list) < 3:
+    if not price_list:
         return []
 
     maxima_indices = []
+    last_idx = len(price_list) - 1
 
-    for i in range(1, len(price_list) - 1):
-        # Check if current value is numeric
+    # Handle single element
+    if last_idx == 0:
+        return [0] if isinstance(price_list[0], (int, float)) else []
+
+    # Check first element (boundary maximum)
+    if (
+        isinstance(price_list[0], (int, float))
+        and isinstance(price_list[1], (int, float))
+        and price_list[0] > price_list[1]
+    ):
+        maxima_indices.append(0)
+
+    # Check middle elements (local maxima)
+    for i in range(1, last_idx):
         if not isinstance(price_list[i], (int, float)):
             continue
 
@@ -201,17 +216,83 @@ def find_local_maxima(price_list: list) -> list[int]:
         curr_val = price_list[i]
         next_val = price_list[i + 1]
 
-        # Check if neighbors are also numeric
         if not isinstance(prev_val, (int, float)) or not isinstance(
             next_val, (int, float)
         ):
             continue
 
-        # Check if current value is a local maximum
         if curr_val > prev_val and curr_val > next_val:
             maxima_indices.append(i)
 
+    # Check last element (boundary maximum)
+    if (
+        isinstance(price_list[last_idx], (int, float))
+        and isinstance(price_list[last_idx - 1], (int, float))
+        and price_list[last_idx] > price_list[last_idx - 1]
+    ):
+        maxima_indices.append(last_idx)
+
     return maxima_indices
+
+
+def find_local_minima(price_list: list) -> list[int]:
+    """Find indices of local minima in the price list.
+
+    A local minimum is a value that is smaller than both its neighbors.
+    Edge cases (first and last element) are also considered minima if they
+    are smaller than their single neighbor.
+
+    Args:
+        price_list: The input price list.
+
+    Returns:
+        List of indices where local minima occur.
+
+    """
+    if not price_list:
+        return []
+
+    minima_indices = []
+    last_idx = len(price_list) - 1
+
+    # Handle single element
+    if last_idx == 0:
+        return [0] if isinstance(price_list[0], (int, float)) else []
+
+    # Check first element (boundary minimum)
+    if (
+        isinstance(price_list[0], (int, float))
+        and isinstance(price_list[1], (int, float))
+        and price_list[0] < price_list[1]
+    ):
+        minima_indices.append(0)
+
+    # Check middle elements (local minima)
+    for i in range(1, last_idx):
+        if not isinstance(price_list[i], (int, float)):
+            continue
+
+        prev_val = price_list[i - 1]
+        curr_val = price_list[i]
+        next_val = price_list[i + 1]
+
+        if not isinstance(prev_val, (int, float)) or not isinstance(
+            next_val, (int, float)
+        ):
+            continue
+
+        if curr_val < prev_val and curr_val < next_val:
+            minima_indices.append(i)
+
+    # Check last element (boundary minimum)
+    if (
+        isinstance(price_list[last_idx], (int, float))
+        and isinstance(price_list[last_idx - 1], (int, float))
+        and price_list[last_idx] < price_list[last_idx - 1]
+    ):
+        minima_indices.append(last_idx)
+
+    return minima_indices
 
 
 def convert_indices_to_time_ranges(
@@ -431,10 +512,12 @@ def split_price_list_at_maxima(
         return [], []
     overall_average = sum(numeric_values) / len(numeric_values)
 
-    # Find all local maxima
+    # Find all local maxima and minima
     maxima_indices = find_local_maxima(price_list)
     if not maxima_indices:
         return [], []
+
+    minima_indices_set = set(find_local_minima(price_list))
 
     # Build sublists around ALL maxima (not pre-selecting)
     result = []
@@ -467,35 +550,47 @@ def split_price_list_at_maxima(
             # Check forward direction
             if forward_idx < len(price_list) and forward_idx not in used_indices:
                 val = price_list[forward_idx]
-                # Check if we can expand forward (not below average, not at a used index)
+                # Check if we can expand forward (not below average)
                 if isinstance(val, (int, float)) and val >= overall_average:
-                    # Check if it's a local minimum
-                    if forward_idx < len(price_list) - 1 and val < price_list[forward_idx + 1]:
-                        # It's a local minimum - can include it but this will be the last forward step
-                        forward_val = val
-                        can_expand_forward = True
+                    # Check if it's a local minimum below average
+                    is_local_minimum = forward_idx in minima_indices_set
+                    # Only stop at minimum if it's below overall average
+                    if is_local_minimum and val < overall_average:
+                        # Local minimum below average - stop here
+                        pass
                     else:
+                        # Can expand (either not a minimum, or minimum >= average)
                         forward_val = val
                         can_expand_forward = True
-            
+
             # Check backward direction
             if backward_idx >= 0 and backward_idx not in used_indices:
                 val = price_list[backward_idx]
-                # Check if we can expand backward (not below average, not at a used index)
+                # Check if we can expand backward (not below average)
                 if isinstance(val, (int, float)) and val >= overall_average:
-                    # Check if it's a local minimum
-                    if backward_idx > 0 and val < price_list[backward_idx - 1]:
-                        # It's a local minimum - can include it but this will be the last backward step
+                    # Check if it's a local minimum below average
+                    is_local_minimum = backward_idx in minima_indices_set
+                    # Only stop at minimum if it's below overall average
+                    if is_local_minimum and val < overall_average:
+                        # Local minimum below average - stop here
+                        pass
+                    else:
+                        # Can expand (either not a minimum, or minimum >= average)
                         backward_val = val
                         can_expand_backward = True
+                    # Only stop at minimum if it's below overall average
+                    if is_local_minimum and val < overall_average:
+                        # Local minimum below average - stop here
+                        pass
                     else:
+                        # Can expand (either not a minimum, or minimum >= average)
                         backward_val = val
                         can_expand_backward = True
             
             # If we can't expand in either direction, stop
             if not can_expand_forward and not can_expand_backward:
                 break
-            
+
             # Choose the direction with the larger value
             if can_expand_forward and can_expand_backward:
                 if forward_val >= backward_val:
@@ -503,41 +598,25 @@ def split_price_list_at_maxima(
                     current_sublist.append(forward_val)
                     current_indices.append(forward_idx)
                     used_indices.add(forward_idx)
-                    # Check if it was a local minimum
-                    if forward_idx < len(price_list) - 1 and forward_val < price_list[forward_idx + 1]:
-                        forward_idx = len(price_list)  # Stop forward expansion
-                    else:
-                        forward_idx += 1
+                    forward_idx += 1
                 else:
                     # Expand backward
                     current_sublist.insert(0, backward_val)
                     current_indices.insert(0, backward_idx)
                     used_indices.add(backward_idx)
-                    # Check if it was a local minimum
-                    if backward_idx > 0 and backward_val < price_list[backward_idx - 1]:
-                        backward_idx = -1  # Stop backward expansion
-                    else:
-                        backward_idx -= 1
+                    backward_idx -= 1
             elif can_expand_forward:
                 # Only forward is available
                 current_sublist.append(forward_val)
                 current_indices.append(forward_idx)
                 used_indices.add(forward_idx)
-                # Check if it was a local minimum
-                if forward_idx < len(price_list) - 1 and forward_val < price_list[forward_idx + 1]:
-                    forward_idx = len(price_list)  # Stop forward expansion
-                else:
-                    forward_idx += 1
+                forward_idx += 1
             elif can_expand_backward:
                 # Only backward is available
                 current_sublist.insert(0, backward_val)
                 current_indices.insert(0, backward_idx)
                 used_indices.add(backward_idx)
-                # Check if it was a local minimum
-                if backward_idx > 0 and backward_val < price_list[backward_idx - 1]:
-                    backward_idx = -1  # Stop backward expansion
-                else:
-                    backward_idx -= 1
+                backward_idx -= 1
 
         # Only keep sublists where maximum >= overall average
         max_val = max(val for val in current_sublist if isinstance(val, (int, float)))
