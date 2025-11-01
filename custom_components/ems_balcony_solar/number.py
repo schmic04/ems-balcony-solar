@@ -90,9 +90,8 @@ class EMSBalconySolarNumber(EMSBalconySolarEntity, NumberEntity, RestoreEntity):
 
         # Restore last state
         if (
-            (last_state := await self.async_get_last_state()) is not None
-            and last_state.state not in (None, "unknown", "unavailable")
-        ):
+            last_state := await self.async_get_last_state()
+        ) is not None and last_state.state not in (None, "unknown", "unavailable"):
             try:
                 self._attr_native_value = int(float(last_state.state))
             except (ValueError, TypeError):

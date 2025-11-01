@@ -89,4 +89,3 @@ class EMSBalconySolarSwitch(SwitchEntity, RestoreEntity):
         """Turn off the switch."""
         self._attr_is_on = False
         self.async_write_ha_state()
-
