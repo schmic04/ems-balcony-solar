@@ -5,9 +5,14 @@
     "@schmic04"
   ],
   "config_flow": true,
-  "dependencies": ["recorder"],
+  "dependencies": [
+    "recorder"
+  ],
   "documentation": "https://github.com/schmic04/ems_balcony_solar",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/schmic04/ems_balcony_solar/issues",
+  "requirements": [
+    "pandas>=2.0.0"
+  ],
   "version": "0.1.0"
 }

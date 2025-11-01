@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import random
+import secrets
 
 
 def get_random_value() -> float:
     """
     Generate a random value for the sensor.
-    
+
     Returns a random float between 0 and 100.
     """
-    return round(random.uniform(0, 100), 2)
+    return round(secrets.randbelow(10000) / 100.0, 2)
