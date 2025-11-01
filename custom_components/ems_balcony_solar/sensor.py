@@ -14,6 +14,7 @@ from .const import (
     CONF_NUMBER_OF_SUBLISTS,
     CONF_SENSOR,
     CONF_SUBLIST_LENGTH,
+    UNIQUE_ID_SENSOR_CURRENT_ELECTRICITY_PRICE,
 )
 from .entity import EMSBalconySolarEntity
 from .helpers import get_random_value
@@ -68,7 +69,7 @@ class EMSBalconySolarSensor(EMSBalconySolarEntity, SensorEntity):
         """Initialize the sensor class."""
         super().__init__(coordinator)
         self._attr_name = "Current Electricity Price"
-        self._attr_unique_id = f"{entry.entry_id}_sensor"
+        self._attr_unique_id = UNIQUE_ID_SENSOR_CURRENT_ELECTRICITY_PRICE
         self._source_entity_id = source_entity_id
         self._entry = entry
         self._switch_entity_id: str | None = None
