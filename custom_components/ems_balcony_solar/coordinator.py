@@ -4,11 +4,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import (
-    EMSBalconySolarApiClientAuthenticationError,
     EMSBalconySolarApiClientError,
 )
 
@@ -26,7 +24,5 @@ class EMSBalconySolarDataUpdateCoordinator(DataUpdateCoordinator):
         """Update data via library."""
         try:
             return await self.config_entry.runtime_data.client.async_get_data()
-        except EMSBalconySolarApiClientAuthenticationError as exception:
-            raise ConfigEntryAuthFailed(exception) from exception
         except EMSBalconySolarApiClientError as exception:
             raise UpdateFailed(exception) from exception

@@ -19,19 +19,8 @@ class EMSBalconySolarApiClientCommunicationError(
     """Exception to indicate a communication error."""
 
 
-class EMSBalconySolarApiClientAuthenticationError(
-    EMSBalconySolarApiClientError,
-):
-    """Exception to indicate an authentication error."""
-
-
 def _verify_response_or_raise(response: aiohttp.ClientResponse) -> None:
     """Verify that the response is valid."""
-    if response.status in (401, 403):
-        msg = "Invalid credentials"
-        raise EMSBalconySolarApiClientAuthenticationError(
-            msg,
-        )
     response.raise_for_status()
 
 
@@ -40,13 +29,9 @@ class EMSBalconySolarApiClient:
 
     def __init__(
         self,
-        username: str,
-        password: str,
         session: aiohttp.ClientSession,
     ) -> None:
         """Sample API Client."""
-        self._username = username
-        self._password = password
         self._session = session
 
     async def async_get_data(self) -> Any:

@@ -1,0 +1,34 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "description": "Konfigurieren Sie Ihre EMS Balcony Solar Integration. Alle Felder sind optional.",
+                "data": {
+                    "sensor": "Sensor",
+                    "number_1": "Zahlen-Entität 1",
+                    "number_2": "Zahlen-Entität 2"
+                },
+                "data_description": {
+                    "sensor": "Wählen Sie einen Sensor aus Ihrer Home Assistant Instanz",
+                    "number_1": "Wählen Sie eine Zahlen-Entität aus Ihrer Home Assistant Instanz",
+                    "number_2": "Wählen Sie eine Zahlen-Entität aus Ihrer Home Assistant Instanz"
+                }
+            }
+        },
+        "error": {
+            "connection": "Verbindung zum Server nicht möglich.",
+            "unknown": "Unbekannter Fehler aufgetreten.",
+            "missing_attributes": "Der ausgewählte Sensor fehlt die erforderlichen Attribute (today, tomorrow, tomorrow_valid). Bitte wählen Sie einen gültigen Preis-Sensor."
+        },
+        "abort": {
+            "already_configured": "Dieser Eintrag ist bereits konfiguriert."
+        }
+    },
+    "entity": {
+        "binary_sensor": {
+            "price_range_active": {
+                "name": "Preisbereich aktiv"
+            }
+        }
+    }
+}
