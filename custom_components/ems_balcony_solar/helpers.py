@@ -6,7 +6,8 @@ import random
 
 
 def get_random_value() -> float:
-    """Generate a random value for the sensor.
+    """
+    Generate a random value for the sensor.
     
     Returns a random float between 0 and 100.
     """
