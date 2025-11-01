@@ -164,7 +164,7 @@ class EMSBalconySolarSensor(EMSBalconySolarEntity, SensorEntity):
             self._unsub_number_2_change = None
 
     @callback
-    def _handle_source_state_change(self, event: Event[EventStateChangedData]) -> None:
+    def _handle_source_state_change(self, _event: Event[EventStateChangedData]) -> None:
         """Handle state changes of the source sensor."""
         # Only update if the switch is on
         if self._is_switch_on():
@@ -183,7 +183,7 @@ class EMSBalconySolarSensor(EMSBalconySolarEntity, SensorEntity):
                 self._update_sensor("switch turned off")
 
     @callback
-    def _handle_number_state_change(self, event: Event[EventStateChangedData]) -> None:
+    def _handle_number_state_change(self, _event: Event[EventStateChangedData]) -> None:
         """Handle state changes of number entities."""
         # Only update if the switch is on
         if self._is_switch_on():

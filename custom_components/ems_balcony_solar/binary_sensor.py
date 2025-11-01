@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
 import logging
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
 from homeassistant.components.binary_sensor import (
@@ -162,9 +162,7 @@ class EMSBalconySolarPriceRangeBinarySensor(EMSBalconySolarEntity, BinarySensorE
             potential_switch_id = "switch.ems_balcony_solar"
             if self.hass.states.get(potential_switch_id):
                 self._switch_entity_id = potential_switch_id
-                _LOGGER.debug(
-                    "Found switch entity: %s", self._switch_entity_id
-                )
+                _LOGGER.debug("Found switch entity: %s", self._switch_entity_id)
 
         # Check switch state (default to True if not found yet)
         if not self._switch_entity_id:
@@ -175,103 +173,105 @@ class EMSBalconySolarPriceRangeBinarySensor(EMSBalconySolarEntity, BinarySensorE
 
     def _update_state(self) -> None:
         """Update the state based on current time and price ranges."""
-        # If switch is off, set binary sensor to off with empty attributes
         if not self._is_switch_on():
-            self._is_on = False
-            self._active_range = None
-            self._next_range = None
-            self._attr_extra_state_attributes = {
-                "active_range": None,
-                "next_range": None,
-                "last_check": datetime.now().astimezone().isoformat(),
-            }
+            self._set_inactive_state()
             return
 
-        # Get time ranges from the Current Electricity Price sensor
-        # This sensor has the price_sublists_time_ranges attribute
+        time_ranges, reference_date = self._get_time_ranges_and_reference()
+        if not time_ranges:
+            self._set_inactive_state()
+            return
+
+        self._process_time_ranges(time_ranges, reference_date)
+
+    def _set_inactive_state(self) -> None:
+        """Set the binary sensor to inactive state with empty attributes."""
+        self._is_on = False
+        self._active_range = None
+        self._next_range = None
+        self._attr_extra_state_attributes = {
+            "active_range": None,
+            "next_range": None,
+            "last_check": datetime.now().astimezone().isoformat(),
+        }
+
+    def _get_time_ranges_and_reference(self) -> tuple[list, datetime]:
+        """Get time ranges and reference date from the price sensor."""
         sensor_entity_id = "sensor.current_electricity_price"
         state = self.hass.states.get(sensor_entity_id)
 
         if not state or not state.attributes:
-            self._is_on = False
-            self._active_range = None
-            self._next_range = None
-            self._attr_extra_state_attributes = {
-                "active_range": None,
-                "next_range": None,
-                "last_check": datetime.now().astimezone().isoformat(),
-            }
-            return
+            return [], datetime.now().astimezone()
 
         time_ranges = state.attributes.get("price_sublists_time_ranges", [])
         last_update_str = state.attributes.get("last_update")
 
-        if not time_ranges:
-            self._is_on = False
-            self._active_range = None
-            self._next_range = None
-            self._attr_extra_state_attributes = {
-                "active_range": None,
-                "next_range": None,
-                "last_check": datetime.now().astimezone().isoformat(),
-            }
-            return
+        reference_date = self._parse_reference_date(last_update_str)
+        return time_ranges, reference_date
 
-        # Get reference date from sensor's last_update timestamp
-        # Day offsets (+00, +01) in time ranges refer to this update time
-        reference_date = None
+    def _parse_reference_date(self, last_update_str: str | None) -> datetime:
+        """Parse reference date from last_update string."""
         if last_update_str:
             try:
-                reference_date = datetime.fromisoformat(last_update_str)
+                return datetime.fromisoformat(last_update_str)
             except ValueError:
                 _LOGGER.warning(
                     "Failed to parse last_update timestamp: %s", last_update_str
                 )
+        return datetime.now().astimezone()
 
-        # Fallback to current time if no last_update available
-        if reference_date is None:
-            reference_date = datetime.now().astimezone()
-
-        # Check if current time is in any range and find next range
+    def _process_time_ranges(self, time_ranges: list, reference_date: datetime) -> None:
+        """Process time ranges to determine active and next ranges."""
         now = datetime.now().astimezone()
+        all_ranges_with_times = self._parse_all_ranges(time_ranges, reference_date)
+
         self._is_on = False
         self._active_range = None
         self._next_range = None
-        next_start_time = None
 
-        # Collect all ranges with their start times
-        all_ranges_with_times = []
-        for sublist_ranges in time_ranges:
-            for time_range in sublist_ranges:
-                try:
-                    # Use sensor update time for day offset calculation
-                    start, end = parse_time_range_to_timestamps(
-                        time_range, reference_date
-                    )
-                    all_ranges_with_times.append((time_range, start, end))
-                except ValueError as e:
-                    _LOGGER.warning("Failed to parse time range %s: %s", time_range, e)
+        self._find_active_range(all_ranges_with_times, now)
+        self._find_next_range(all_ranges_with_times, now)
 
-        # Check if current time is in any active range
-        for time_range, start, end in all_ranges_with_times:
-            if start <= now < end:
-                self._is_on = True
-                self._active_range = time_range
-                break  # Found active range, stop searching
-
-        # Find next upcoming range (independent of current state)
-        for time_range, start, _end in all_ranges_with_times:
-            if start > now and (next_start_time is None or start < next_start_time):
-                next_start_time = start
-                self._next_range = time_range
-
-        # Set attributes
         self._attr_extra_state_attributes = {
             "active_range": self._active_range,
             "next_range": self._next_range,
             "last_check": now.isoformat(),
         }
 
+        self._log_state_info(now)
+
+    def _parse_all_ranges(self, time_ranges: list, reference_date: datetime) -> list:
+        """Parse all time ranges into (range, start, end) tuples."""
+        all_ranges_with_times = []
+        for sublist_ranges in time_ranges:
+            for time_range in sublist_ranges:
+                try:
+                    start, end = parse_time_range_to_timestamps(
+                        time_range, reference_date
+                    )
+                    all_ranges_with_times.append((time_range, start, end))
+                except ValueError as e:
+                    _LOGGER.warning("Failed to parse time range %s: %s", time_range, e)
+        return all_ranges_with_times
+
+    def _find_active_range(self, all_ranges_with_times: list, now: datetime) -> None:
+        """Find if current time is in any active range."""
+        for time_range, start, end in all_ranges_with_times:
+            if start <= now < end:
+                self._is_on = True
+                self._active_range = time_range
+                break
+
+    def _find_next_range(self, all_ranges_with_times: list, now: datetime) -> None:
+        """Find the next upcoming range."""
+        next_start_time = None
+        for time_range, start, _end in all_ranges_with_times:
+            if start > now and (next_start_time is None or start < next_start_time):
+                next_start_time = start
+                self._next_range = time_range
+
+    def _log_state_info(self, now: datetime) -> None:
+        """Log current state information."""
         if self._is_on:
             _LOGGER.debug(
                 "Current time %s is in range %s, next range: %s",

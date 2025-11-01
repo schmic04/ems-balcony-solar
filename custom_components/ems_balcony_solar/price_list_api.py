@@ -3,17 +3,27 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
+
+
+class ExpansionContext(NamedTuple):
+    """Context for expanding around maximum."""
+
+    minima_indices_set: set[int]
+    overall_average: float
+    target_sublist_length: int | None
+    used_indices: set[int]
 
 
 def get_combined_price_list(
     hass: HomeAssistant,
     sensor_entity_id: str,
 ) -> list:
-    """Get combined price list from today and tomorrow attributes.
+    """
+    Get combined price list from today and tomorrow attributes.
 
     Args:
         hass: Home Assistant instance.
@@ -25,6 +35,7 @@ def get_combined_price_list(
         - Simple list of floats (Nord Pool sensor)
         - List of dicts with start_time, end_time, value (other sensors)
         Returns empty list if sensor not found or attributes missing.
+
     """
     if not sensor_entity_id:
         return []
@@ -54,7 +65,8 @@ def get_combined_price_list(
 def group_prices_by_hour(
     price_list: list,
 ) -> list[dict[str, str | float | int]]:
-    """Group price list into hourly summaries.
+    """
+    Group price list into hourly summaries.
 
     Takes the combined price list from get_combined_price_list() and
     structures it for easy hour-based access.
@@ -79,44 +91,44 @@ def group_prices_by_hour(
     if not price_list:
         return []
 
-    result = []
-    now = datetime.now().astimezone()
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-
-    # Check if price_list contains dicts or simple values
     first_entry = price_list[0] if price_list else None
 
     if isinstance(first_entry, dict):
-        # Format 1: List of dicts with start/end/value (15-min intervals)
-        hourly_data = {}
+        return _process_dict_format_prices(price_list)
 
-        for entry in price_list:
-            if not isinstance(entry, dict):
-                continue
+    return _process_simple_format_prices(price_list)
 
-            start_time = entry.get("start")
-            price = entry.get("value")
 
-            if not isinstance(start_time, datetime) or price is None:
-                continue
+def _process_dict_format_prices(price_list: list) -> list[dict[str, str | float | int]]:
+    """Process price list in dict format (15-min intervals with start/end/value)."""
+    hourly_data = {}
 
-            # Create hour key (rounded down to hour)
-            hour_key = start_time.replace(minute=0, second=0, microsecond=0)
+    for entry in price_list:
+        if not isinstance(entry, dict):
+            continue
 
-            if hour_key not in hourly_data:
-                hourly_data[hour_key] = {
-                    "datetime": hour_key,
-                    "prices": [],
-                }
+        start_time = entry.get("start")
+        price = entry.get("value")
 
-            hourly_data[hour_key]["prices"].append(price)
+        if not isinstance(start_time, datetime) or price is None:
+            continue
 
-        # Calculate statistics for each hour
-        for hour_dt, data in sorted(hourly_data.items()):
-            prices = data["prices"]
-            if not prices:
-                continue
+        # Create hour key (rounded down to hour)
+        hour_key = start_time.replace(minute=0, second=0, microsecond=0)
 
+        if hour_key not in hourly_data:
+            hourly_data[hour_key] = {
+                "datetime": hour_key,
+                "prices": [],
+            }
+
+        hourly_data[hour_key]["prices"].append(price)
+
+    # Calculate statistics for each hour
+    result = []
+    for hour_dt, data in sorted(hourly_data.items()):
+        prices = data["prices"]
+        if prices:
             result.append(
                 {
                     "date": hour_dt.strftime("%Y-%m-%d"),
@@ -125,58 +137,69 @@ def group_prices_by_hour(
                 }
             )
 
-    else:
-        # Format 2: Simple list of floats (15-minute interval prices)
-        # Each index represents a 15-minute interval starting from today 00:00
-        # 4 consecutive entries = 1 hour
-        for i, price in enumerate(price_list):
-            if not isinstance(price, (int, float)):
-                continue
-
-            # Calculate the datetime for this 15-minute interval
-            interval_dt = today_start + timedelta(minutes=i * 15)
-
-            # Round down to the hour to group by hour
-            hour_dt = interval_dt.replace(minute=0, second=0, microsecond=0)
-            hour_key = hour_dt.strftime("%H:%M")
-
-            # Find or create entry for this hour
-            existing = None
-            for entry in result:
-                if entry["hour"] == hour_key and entry["date"] == hour_dt.strftime(
-                    "%Y-%m-%d"
-                ):
-                    existing = entry
-                    break
-
-            if existing:
-                # Add price to existing hour
-                existing["prices"].append(float(price))
-            else:
-                # Create new hour entry
-                result.append(
-                    {
-                        "date": hour_dt.strftime("%Y-%m-%d"),
-                        "hour": hour_key,
-                        "prices": [float(price)],
-                    }
-                )
-
-        # Calculate statistics for each hour (from 4 x 15-min intervals)
-        for entry in result:
-            prices = entry["prices"]
-            if prices:
-                entry["avg"] = round(sum(prices) / len(prices), 4)
-                entry["min"] = round(min(prices), 4)
-                entry["max"] = round(max(prices), 4)
-                # Format prices as a single line string
-                entry["prices"] = ", ".join([str(round(p, 4)) for p in prices])
-
     return result
 
 
+def _process_simple_format_prices(
+    price_list: list,
+) -> list[dict[str, str | float | int]]:
+    """Process price list in simple format (list of floats)."""
+    now = datetime.now().astimezone()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    result = []
+
+    for i, price in enumerate(price_list):
+        if not isinstance(price, (int, float)):
+            continue
+
+        # Calculate the datetime for this 15-minute interval
+        interval_dt = today_start + timedelta(minutes=i * 15)
+        hour_dt = interval_dt.replace(minute=0, second=0, microsecond=0)
+        hour_key = hour_dt.strftime("%H:%M")
+
+        # Find or create entry for this hour
+        existing = _find_existing_hour_entry(result, hour_key, hour_dt)
+
+        if existing:
+            existing["prices"].append(float(price))
+        else:
+            result.append(
+                {
+                    "date": hour_dt.strftime("%Y-%m-%d"),
+                    "hour": hour_key,
+                    "prices": [float(price)],
+                }
+            )
+
+    # Calculate statistics for each hour
+    _calculate_hour_statistics(result)
+    return result
+
+
+def _find_existing_hour_entry(
+    result: list[dict], hour_key: str, hour_dt: datetime
+) -> dict | None:
+    """Find existing hour entry in result list."""
+    for entry in result:
+        if entry["hour"] == hour_key and entry["date"] == hour_dt.strftime("%Y-%m-%d"):
+            return entry
+    return None
+
+
+def _calculate_hour_statistics(result: list[dict]) -> None:
+    """Calculate statistics for each hour entry."""
+    for entry in result:
+        prices = entry["prices"]
+        if prices:
+            entry["avg"] = round(sum(prices) / len(prices), 4)
+            entry["min"] = round(min(prices), 4)
+            entry["max"] = round(max(prices), 4)
+            entry["prices"] = ", ".join([str(round(p, 4)) for p in prices])
+
+
 def find_local_maxima(price_list: list) -> list[int]:
-    """Find indices of local maxima in the price list.
+    """
+    Find indices of local maxima in the price list.
 
     A local maximum is a value that is greater than both its neighbors.
     Edge cases (first and last element) are also considered maxima if they
@@ -236,7 +259,8 @@ def find_local_maxima(price_list: list) -> list[int]:
 
 
 def find_local_minima(price_list: list) -> list[int]:
-    """Find indices of local minima in the price list.
+    """
+    Find indices of local minima in the price list.
 
     A local minimum is a value that is smaller than both its neighbors.
     Edge cases (first and last element) are also considered minima if they
@@ -299,7 +323,8 @@ def convert_indices_to_time_ranges(
     indices_list: list[list[int]],
     start_time: datetime | None = None,
 ) -> list[list[str]]:
-    """Convert index lists to time ranges.
+    """
+    Convert index lists to time ranges.
 
     Each index represents a 15-minute interval. Index 0 corresponds to 00:00.
 
@@ -337,16 +362,18 @@ def convert_indices_to_time_ranges(
                 current_range_end = idx_list[i]
             else:
                 # Gap found, save current range and start new one
-                time_ranges.append(_format_time_range(
-                    current_range_start, current_range_end, start_time
-                ))
+                time_ranges.append(
+                    _format_time_range(
+                        current_range_start, current_range_end, start_time
+                    )
+                )
                 current_range_start = idx_list[i]
                 current_range_end = idx_list[i]
 
         # Add the last range
-        time_ranges.append(_format_time_range(
-            current_range_start, current_range_end, start_time
-        ))
+        time_ranges.append(
+            _format_time_range(current_range_start, current_range_end, start_time)
+        )
 
         time_ranges_list.append(time_ranges)
 
@@ -358,7 +385,8 @@ def _format_time_range(
     end_idx: int,
     base_time: datetime,
 ) -> str:
-    """Format a time range from indices with day offset.
+    """
+    Format a time range from indices with day offset.
 
     Args:
         start_idx: Start index (0 = 00:00).
@@ -389,7 +417,8 @@ def parse_time_range_to_timestamps(
     time_range: str,
     reference_date: datetime | None = None,
 ) -> tuple[datetime, datetime]:
-    """Parse a time range string to start and end timestamps.
+    """
+    Parse a time range string to start and end timestamps.
 
     Args:
         time_range: Time range string in format "HH:MM+DD-HH:MM+DD" or "HH:MM-HH:MM".
@@ -409,13 +438,19 @@ def parse_time_range_to_timestamps(
         (datetime(2025, 10, 22, 23, 0), datetime(2025, 10, 23, 1, 0))
 
     """
+
+    def _raise_invalid_format_error(time_range: str) -> None:
+        """Raise ValueError for invalid time range format."""
+        msg = f"Invalid time range format: '{time_range}'"
+        raise ValueError(msg)
+
+    expected_parts_count = 2
     try:
         # Split time range at the middle dash
         # Format can be: "HH:MM+D-HH:MM+D" or "HH:MM-HH:MM" (legacy)
         parts = time_range.split("-")
-        if len(parts) != 2:
-            msg = f"Invalid time range format: '{time_range}'"
-            raise ValueError(msg)
+        if len(parts) != expected_parts_count:
+            _raise_invalid_format_error(time_range)
 
         start_str, end_str = parts
 
@@ -459,16 +494,14 @@ def parse_time_range_to_timestamps(
             hour=start_hour, minute=start_min
         ) + timedelta(days=start_day_offset)
 
-        end_timestamp = base_date.replace(
-            hour=end_hour, minute=end_min
-        ) + timedelta(days=end_day_offset)
+        end_timestamp = base_date.replace(hour=end_hour, minute=end_min) + timedelta(
+            days=end_day_offset
+        )
 
-        # Legacy support: Handle case where end time is on next day (e.g., "23:00-01:00")
+        # Legacy support: Handle end time on next day (e.g., "23:00-01:00")
         # Only if no explicit day offsets were provided
         if "+" not in time_range and end_timestamp <= start_timestamp:
             end_timestamp += timedelta(days=1)
-
-        return start_timestamp, end_timestamp
 
     except (ValueError, AttributeError) as e:
         msg = (
@@ -476,6 +509,8 @@ def parse_time_range_to_timestamps(
             "Expected format: 'HH:MM+DD-HH:MM+DD' or 'HH:MM-HH:MM'"
         )
         raise ValueError(msg) from e
+    else:
+        return start_timestamp, end_timestamp
 
 
 def split_price_list_at_maxima(
@@ -483,7 +518,8 @@ def split_price_list_at_maxima(
     number_of_sublists: int,
     target_sublist_length: int | None = None,
 ) -> tuple[list[list], list[list[int]]]:
-    """Split price list into sublists around local maxima.
+    """
+    Split price list into sublists around local maxima.
 
     Creates sublists centered around local maxima. Each sublist contains
     the largest values around its maximum and extends until:
@@ -519,114 +555,169 @@ def split_price_list_at_maxima(
 
     minima_indices_set = set(find_local_minima(price_list))
 
-    # Build sublists around ALL maxima (not pre-selecting)
+    # Build sublists around ALL maxima
+    sublists_data = _build_sublists_around_maxima(
+        price_list,
+        maxima_indices,
+        minima_indices_set,
+        overall_average,
+        target_sublist_length,
+    )
+
+    # Sort by total value and select top N
+    return _sort_and_select_sublists(sublists_data, number_of_sublists)
+
+
+def _build_sublists_around_maxima(
+    price_list: list,
+    maxima_indices: list[int],
+    minima_indices_set: set[int],
+    overall_average: float,
+    target_sublist_length: int | None,
+) -> list[tuple[list, list[int]]]:
+    """Build sublists around each maximum."""
     result = []
-    indices = []
     used_indices = set()
+
+    context = ExpansionContext(
+        minima_indices_set=minima_indices_set,
+        overall_average=overall_average,
+        target_sublist_length=target_sublist_length,
+        used_indices=used_indices,
+    )
 
     for max_idx in maxima_indices:
         if max_idx in used_indices:
             continue
 
-        current_sublist = [price_list[max_idx]]
-        current_indices = [max_idx]
-        used_indices.add(max_idx)
+        sublist_data = _expand_around_maximum(price_list, max_idx, context)
 
-        # Expand around the maximum, always choosing the larger available value
-        forward_idx = max_idx + 1
-        backward_idx = max_idx - 1
-        
-        while True:
-            # Check if we've reached the target length
-            if target_sublist_length and len(current_sublist) >= target_sublist_length:
-                break
-            
-            # Get available values in both directions
-            forward_val = None
-            backward_val = None
-            can_expand_forward = False
-            can_expand_backward = False
-            
-            # Check forward direction
-            if forward_idx < len(price_list) and forward_idx not in used_indices:
-                val = price_list[forward_idx]
-                # Check if we can expand forward (not below average)
-                if isinstance(val, (int, float)) and val >= overall_average:
-                    # Check if it's a local minimum below average
-                    is_local_minimum = forward_idx in minima_indices_set
-                    # Only stop at minimum if it's below overall average
-                    if is_local_minimum and val < overall_average:
-                        # Local minimum below average - stop here
-                        pass
-                    else:
-                        # Can expand (either not a minimum, or minimum >= average)
-                        forward_val = val
-                        can_expand_forward = True
+        if sublist_data:
+            current_sublist, current_indices = sublist_data
+            result.append((current_sublist, current_indices))
 
-            # Check backward direction
-            if backward_idx >= 0 and backward_idx not in used_indices:
-                val = price_list[backward_idx]
-                # Check if we can expand backward (not below average)
-                if isinstance(val, (int, float)) and val >= overall_average:
-                    # Check if it's a local minimum below average
-                    is_local_minimum = backward_idx in minima_indices_set
-                    # Only stop at minimum if it's below overall average
-                    if is_local_minimum and val < overall_average:
-                        # Local minimum below average - stop here
-                        pass
-                    else:
-                        # Can expand (either not a minimum, or minimum >= average)
-                        backward_val = val
-                        can_expand_backward = True
-                    # Only stop at minimum if it's below overall average
-                    if is_local_minimum and val < overall_average:
-                        # Local minimum below average - stop here
-                        pass
-                    else:
-                        # Can expand (either not a minimum, or minimum >= average)
-                        backward_val = val
-                        can_expand_backward = True
-            
-            # If we can't expand in either direction, stop
-            if not can_expand_forward and not can_expand_backward:
-                break
+    return result
 
-            # Choose the direction with the larger value
-            if can_expand_forward and can_expand_backward:
-                if forward_val >= backward_val:
-                    # Expand forward
-                    current_sublist.append(forward_val)
-                    current_indices.append(forward_idx)
-                    used_indices.add(forward_idx)
-                    forward_idx += 1
-                else:
-                    # Expand backward
-                    current_sublist.insert(0, backward_val)
-                    current_indices.insert(0, backward_idx)
-                    used_indices.add(backward_idx)
-                    backward_idx -= 1
-            elif can_expand_forward:
-                # Only forward is available
-                current_sublist.append(forward_val)
-                current_indices.append(forward_idx)
-                used_indices.add(forward_idx)
-                forward_idx += 1
-            elif can_expand_backward:
-                # Only backward is available
-                current_sublist.insert(0, backward_val)
-                current_indices.insert(0, backward_idx)
-                used_indices.add(backward_idx)
-                backward_idx -= 1
 
-        # Only keep sublists where maximum >= overall average
-        max_val = max(val for val in current_sublist if isinstance(val, (int, float)))
-        if max_val >= overall_average:
-            result.append(current_sublist)
-            indices.append(current_indices)
+def _expand_around_maximum(
+    price_list: list,
+    max_idx: int,
+    context: ExpansionContext,
+) -> tuple[list, list[int]] | None:
+    """Expand around a single maximum to create a sublist."""
+    current_sublist = [price_list[max_idx]]
+    current_indices = [max_idx]
+    context.used_indices.add(max_idx)
 
-    # Sort ALL sublists by sum (descending - largest first)
+    forward_idx = max_idx + 1
+    backward_idx = max_idx - 1
+
+    while True:
+        if (
+            context.target_sublist_length
+            and len(current_sublist) >= context.target_sublist_length
+        ):
+            break
+
+        forward_data = _check_expansion_direction(
+            price_list,
+            forward_idx,
+            context.used_indices,
+            context.minima_indices_set,
+            context.overall_average,
+        )
+        backward_data = _check_expansion_direction(
+            price_list,
+            backward_idx,
+            context.used_indices,
+            context.minima_indices_set,
+            context.overall_average,
+        )
+
+        if not forward_data and not backward_data:
+            break
+
+        direction = _choose_expansion_direction(forward_data, backward_data)
+
+        if direction == "forward" and forward_data is not None:
+            _expand_forward(
+                current_sublist, current_indices, context.used_indices, forward_data
+            )
+            forward_idx += 1
+        elif direction == "backward" and backward_data is not None:
+            _expand_backward(
+                current_sublist, current_indices, context.used_indices, backward_data
+            )
+            backward_idx -= 1
+
+    return current_sublist, current_indices
+
+
+def _check_expansion_direction(
+    price_list: list,
+    idx: int,
+    used_indices: set[int],
+    minima_indices_set: set[int],
+    overall_average: float,
+) -> tuple[int, float] | None:
+    """Check if we can expand in a given direction."""
+    if idx < 0 or idx >= len(price_list) or idx in used_indices:
+        return None
+
+    val = price_list[idx]
+    if not isinstance(val, (int, float)) or val < overall_average:
+        return None
+
+    is_local_minimum = idx in minima_indices_set
+    if is_local_minimum and val < overall_average:
+        return None
+
+    return idx, val
+
+
+def _choose_expansion_direction(
+    forward_data: tuple[int, float] | None,
+    backward_data: tuple[int, float] | None,
+) -> str:
+    """Choose which direction to expand based on available values."""
+    if forward_data and backward_data:
+        return "forward" if forward_data[1] >= backward_data[1] else "backward"
+    return "forward" if forward_data else "backward"
+
+
+def _expand_forward(
+    current_sublist: list,
+    current_indices: list[int],
+    used_indices: set[int],
+    forward_data: tuple[int, float],
+) -> None:
+    """Expand sublist in forward direction."""
+    idx, val = forward_data
+    current_sublist.append(val)
+    current_indices.append(idx)
+    used_indices.add(idx)
+
+
+def _expand_backward(
+    current_sublist: list,
+    current_indices: list[int],
+    used_indices: set[int],
+    backward_data: tuple[int, float],
+) -> None:
+    """Expand sublist in backward direction."""
+    idx, val = backward_data
+    current_sublist.insert(0, val)
+    current_indices.insert(0, idx)
+    used_indices.add(idx)
+
+
+def _sort_and_select_sublists(
+    sublists_data: list[tuple[list, list[int]]],
+    number_of_sublists: int,
+) -> tuple[list[list], list[list[int]]]:
+    """Sort sublists by sum and select top ones."""
     combined = []
-    for sublist, idx_list in zip(result, indices, strict=True):
+    for sublist, idx_list in sublists_data:
         try:
             total = sum(val for val in sublist if isinstance(val, (int, float)))
         except (TypeError, ValueError):
@@ -634,11 +725,8 @@ def split_price_list_at_maxima(
         combined.append((total, sublist, idx_list))
 
     combined.sort(key=lambda x: x[0], reverse=True)
-
-    # Select only the top number_of_sublists
     combined = combined[:number_of_sublists]
 
-    # Unpack sorted and filtered results
     result = [item[1] for item in combined]
     indices = [item[2] for item in combined]
 
@@ -650,7 +738,8 @@ def select_maxima_by_length(
     count: int,
     target_length: int,
 ) -> list[int]:
-    """Select maxima to create sublists close to target length.
+    """
+    Select maxima to create sublists close to target length.
 
     Args:
         maxima_indices: List of all local maxima indices.
@@ -667,7 +756,7 @@ def select_maxima_by_length(
     selected = []
     current_pos = 0
 
-    for i in range(count):
+    for _ in range(count):
         # Calculate ideal position for next split
         ideal_position = current_pos + target_length
 
@@ -694,7 +783,8 @@ def select_best_maxima(
     count: int,
     total_length: int,
 ) -> list[int]:
-    """Select the best maxima to use as split points.
+    """
+    Select the best maxima to use as split points.
 
     Selects maxima that are roughly evenly distributed across the list.
 
@@ -736,7 +826,8 @@ def split_price_list(
     sublist_length: int,
     number_of_sublists: int,
 ) -> tuple[list[list], list[list[int]]]:
-    """Split price list into sublists at local maxima positions.
+    """
+    Split price list into sublists at local maxima positions.
 
     Splits the price list at local maxima to create the specified number
     of sublists, aiming for each sublist to have approximately the specified length.
@@ -766,13 +857,12 @@ def split_price_list(
     return split_price_list_at_maxima(price_list, number_of_sublists)
 
 
-
-
 def get_current_price(
     hass: HomeAssistant,
     sensor_entity_id: str,
 ) -> float | None:
-    """Get the current price from the sensor.
+    """
+    Get the current price from the sensor.
 
     Args:
         hass: Home Assistant instance.
@@ -780,6 +870,7 @@ def get_current_price(
 
     Returns:
         Current price as float, or None if not available.
+
     """
     if not sensor_entity_id:
         return None
@@ -798,7 +889,8 @@ def get_price_at_time(
     price_list: list[dict[str, float | datetime]],
     target_time: datetime,
 ) -> float | None:
-    """Get the price at a specific time from the price list.
+    """
+    Get the price at a specific time from the price list.
 
     Args:
         price_list: Combined price list from get_combined_price_list.
@@ -806,14 +898,21 @@ def get_price_at_time(
 
     Returns:
         Price at the specified time, or None if not found.
+
     """
     for entry in price_list:
         start_time = entry.get("start")
         end_time = entry.get("end")
 
-        if start_time and end_time:
-            if start_time <= target_time < end_time:
-                return entry.get("value")
+        if (
+            start_time
+            and end_time
+            and isinstance(start_time, datetime)
+            and isinstance(end_time, datetime)
+            and start_time <= target_time < end_time
+        ):
+            value = entry.get("value")
+            return value if isinstance(value, (int, float)) else None
 
     return None
 
@@ -822,7 +921,8 @@ def get_lowest_price_period(
     price_list: list[dict[str, float | datetime]],
     duration_hours: int = 1,
 ) -> dict[str, float | datetime] | None:
-    """Find the period with the lowest average price.
+    """
+    Find the period with the lowest average price.
 
     Args:
         price_list: Combined price list from get_combined_price_list.
@@ -831,6 +931,7 @@ def get_lowest_price_period(
     Returns:
         Dictionary with start_time, end_time, and average_price,
         or None if not enough data.
+
     """
     if not price_list or duration_hours < 1:
         return None
@@ -840,7 +941,12 @@ def get_lowest_price_period(
 
     for i in range(len(price_list) - duration_hours + 1):
         period = price_list[i : i + duration_hours]
-        avg_price = sum(entry.get("value", 0) for entry in period) / len(period)
+        total_price = sum(
+            float(value)
+            for entry in period
+            if isinstance((value := entry.get("value")), (int, float))
+        )
+        avg_price = total_price / len(period)
 
         if avg_price < lowest_avg:
             lowest_avg = avg_price
