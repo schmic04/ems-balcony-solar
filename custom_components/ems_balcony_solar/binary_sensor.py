@@ -16,6 +16,7 @@ from homeassistant.helpers.event import (
     async_track_time_interval,
 )
 
+from .const import UNIQUE_ID_BINARY_SENSOR_PRICE_RANGE_ACTIVE
 from .entity import EMSBalconySolarEntity
 from .price_list_api import parse_time_range_to_timestamps
 
@@ -58,7 +59,7 @@ class EMSBalconySolarPriceRangeBinarySensor(EMSBalconySolarEntity, BinarySensorE
         """Initialize the binary sensor."""
         super().__init__(coordinator)
         self._config_entry = config_entry
-        self._attr_unique_id = f"{config_entry.entry_id}_price_range_active"
+        self._attr_unique_id = UNIQUE_ID_BINARY_SENSOR_PRICE_RANGE_ACTIVE
         self._attr_name = "Price Range Active"
         self._is_on = False
         self._active_range = None

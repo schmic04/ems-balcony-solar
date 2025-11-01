@@ -8,6 +8,8 @@ from homeassistant.components.switch import SwitchEntity, SwitchEntityDescriptio
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.restore_state import RestoreEntity
 
+from .const import UNIQUE_ID_SWITCH_DEBUGGING, UNIQUE_ID_SWITCH_EMS_BALCONY_SOLAR
+
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -56,7 +58,17 @@ class EMSBalconySolarSwitch(SwitchEntity, RestoreEntity):
         super().__init__()
         self.entity_description = entity_description
         entry_id = coordinator.config_entry.entry_id
-        self._attr_unique_id = f"{entry_id}_{entity_description.key}"
+
+        # Map entity description key to unique ID
+        unique_id_map = {
+            "ems_balcony_solar": UNIQUE_ID_SWITCH_EMS_BALCONY_SOLAR,
+            "debugging": UNIQUE_ID_SWITCH_DEBUGGING,
+        }
+        self._attr_unique_id = unique_id_map.get(
+            entity_description.key,
+            f"ems_balcony_solar_switch_{entity_description.key}",
+        )
+
         self._attr_device_info = DeviceInfo(
             identifiers={
                 (

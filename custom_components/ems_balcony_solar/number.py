@@ -13,6 +13,8 @@ from .const import (
     CONF_SUBLIST_LENGTH,
     CREATED_NUMBER_OF_SUBLISTS,
     CREATED_SUBLIST_LENGTH,
+    UNIQUE_ID_NUMBER_OF_SUBLISTS,
+    UNIQUE_ID_NUMBER_SUBLIST_LENGTH,
 )
 from .entity import EMSBalconySolarEntity
 
@@ -38,7 +40,7 @@ async def async_setup_entry(
                 entry=entry,
                 number_id=CREATED_SUBLIST_LENGTH,
                 name="Sublist Length",
-                unique_id_suffix="sublist_length",
+                unique_id=UNIQUE_ID_NUMBER_SUBLIST_LENGTH,
             )
         )
 
@@ -52,7 +54,7 @@ async def async_setup_entry(
                 entry=entry,
                 number_id=CREATED_NUMBER_OF_SUBLISTS,
                 name="Number of Sublists",
-                unique_id_suffix="number_of_sublists",
+                unique_id=UNIQUE_ID_NUMBER_OF_SUBLISTS,
             )
         )
 
@@ -74,12 +76,12 @@ class EMSBalconySolarNumber(EMSBalconySolarEntity, NumberEntity, RestoreEntity):
         entry: EMSBalconySolarConfigEntry,
         number_id: str,
         name: str,
-        unique_id_suffix: str,
+        unique_id: str,
     ) -> None:
         """Initialize the number entity."""
         super().__init__(entry.runtime_data.coordinator)
         self._attr_name = name
-        self._attr_unique_id = f"{entry.entry_id}_{unique_id_suffix}"
+        self._attr_unique_id = unique_id
         self._number_id = number_id
         self._attr_native_value = 0
         self._entry = entry
