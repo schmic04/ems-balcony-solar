@@ -1,3 +1,4 @@
+# Copyright (c) 2019-2025 Michael Schmidt @schmic04
 """
 Custom integration to integrate ems_balcony_solar with Home Assistant.
 
