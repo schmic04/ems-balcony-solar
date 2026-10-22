@@ -156,13 +156,13 @@ class EMSBalconySolarSensor(EMSBalconySolarEntity, SensorEntity):
             self._unsub_switch_change()
             self._unsub_switch_change = None
 
-        if self._unsub_number_1_change:
-            self._unsub_number_1_change()
-            self._unsub_number_1_change = None
+        if self._unsub_sublist_length_change:
+            self._unsub_sublist_length_change()
+            self._unsub_sublist_length_change = None
 
-        if self._unsub_number_2_change:
-            self._unsub_number_2_change()
-            self._unsub_number_2_change = None
+        if self._unsub_number_of_sublists_change:
+            self._unsub_number_of_sublists_change()
+            self._unsub_number_of_sublists_change = None
 
     @callback
     def _handle_source_state_change(self, _event: Event[EventStateChangedData]) -> None:
