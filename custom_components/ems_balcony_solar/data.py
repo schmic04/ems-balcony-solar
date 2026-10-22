@@ -1,3 +1,4 @@
+# Copyright (c) 2019-2025 Michael Schmidt @schmic04
 """Custom types for ems_balcony_solar."""
 
 from __future__ import annotations
