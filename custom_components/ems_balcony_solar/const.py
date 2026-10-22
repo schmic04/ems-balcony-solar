@@ -5,7 +5,6 @@ from logging import Logger, getLogger
 LOGGER: Logger = getLogger(__package__)
 
 DOMAIN = "ems_balcony_solar"
-ATTRIBUTION = "Data provided by http://jsonplaceholder.typicode.com/"
 
 # Configuration keys
 CONF_SENSOR = "sensor"
