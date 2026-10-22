@@ -1,3 +1,4 @@
+# Copyright (c) 2019-2025 Michael Schmidt @schmic04
 """Adds config flow for EMSBalconySolar."""
 
 from __future__ import annotations

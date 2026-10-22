@@ -1,3 +1,4 @@
+# Copyright (c) 2019-2025 Michael Schmidt @schmic04
 """EMSBalconySolarEntity class."""
 
 from __future__ import annotations
