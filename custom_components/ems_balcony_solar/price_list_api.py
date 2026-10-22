@@ -1,3 +1,4 @@
+# Copyright (c) 2019-2025 Michael Schmidt @schmic04
 """Price list API for EMS Balcony Solar."""
 
 from __future__ import annotations
