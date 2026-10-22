@@ -1,3 +1,5 @@
+# Copyright (c) 2019-2025 Michael Schmidt @schmic04
+# ruff: noqa: S101
 """Tests for the price range binary sensor."""
 
 from __future__ import annotations

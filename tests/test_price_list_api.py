@@ -1,3 +1,5 @@
+# Copyright (c) 2019-2025 Michael Schmidt @schmic04
+# ruff: noqa: S101
 """Tests for the pure functions of price_list_api."""
 
 from __future__ import annotations
@@ -22,6 +24,9 @@ if TYPE_CHECKING:
 
 TZ = timezone(timedelta(hours=2))
 BASE = datetime(2026, 10, 22, 0, 0, tzinfo=TZ)
+SUBLIST_LENGTH = 16
+NUMBER_OF_SUBLISTS = 3
+HOURS_PER_DAY = 24
 
 
 def test_convert_indices_groups_consecutive_indices() -> None:
@@ -68,9 +73,11 @@ def test_parse_time_range_invalid(value: str) -> None:
 
 def test_split_price_list_returns_matching_sublists_and_indices() -> None:
     """Every sublist has an index list of the same length that points into the list."""
-    sublists, indices = split_price_list(PRICES_TODAY, 16, 3)
+    sublists, indices = split_price_list(
+        PRICES_TODAY, SUBLIST_LENGTH, NUMBER_OF_SUBLISTS
+    )
 
-    assert 0 < len(sublists) <= 3
+    assert 0 < len(sublists) <= NUMBER_OF_SUBLISTS
     assert len(sublists) == len(indices)
     for sublist, idx_list in zip(sublists, indices, strict=True):
         assert len(sublist) == len(idx_list)
@@ -79,14 +86,14 @@ def test_split_price_list_returns_matching_sublists_and_indices() -> None:
 
 def test_split_price_list_invalid_input() -> None:
     """Empty list or no sublists yield empty results."""
-    assert split_price_list([], 16, 3) == ([], [])
-    assert split_price_list(PRICES_TODAY, 16, 0) == ([], [])
+    assert split_price_list([], SUBLIST_LENGTH, NUMBER_OF_SUBLISTS) == ([], [])
+    assert split_price_list(PRICES_TODAY, SUBLIST_LENGTH, 0) == ([], [])
 
 
 def test_group_prices_by_hour_simple_list() -> None:
     """A simple list of 96 quarter-hour prices is grouped into 24 hours."""
     hours = group_prices_by_hour(PRICES_TODAY)
-    assert len(hours) == 24
+    assert len(hours) == HOURS_PER_DAY
     assert group_prices_by_hour([]) == []
 
 
