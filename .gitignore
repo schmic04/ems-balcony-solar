@@ -2295,3 +2295,7 @@ custom_components/nordpool/translations/nl.json
 custom_components/nordpool/translations/nn.json
 custom_components/nordpool/translations/sk.json
 custom_components/nordpool/translations/sv.json
+
+# Local Claude Code / MCP config (contains HA access setup, never commit)
+.mcp.json
+.claude/
