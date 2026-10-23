@@ -20,6 +20,7 @@ from .const import (
 from .entity import EMSBalconySolarEntity
 from .helpers import get_random_value
 from .price_list_api import (
+    calculate_sublist_sums,
     convert_indices_to_time_ranges,
     get_combined_price_list,
     group_prices_by_hour,
@@ -259,6 +260,7 @@ class EMSBalconySolarSensor(EMSBalconySolarEntity, SensorEntity):
             attributes["price_sublists"] = []
             attributes["price_sublists_count"] = 0
             attributes["price_sublists_indices"] = []
+            attributes["price_sublists_sums"] = []
             attributes["price_sublists_time_ranges"] = []
             attributes["hourly_prices"] = []
             attributes["hourly_prices_count"] = 0
@@ -283,6 +285,7 @@ class EMSBalconySolarSensor(EMSBalconySolarEntity, SensorEntity):
                 attributes["price_sublists"] = sublists
                 attributes["price_sublists_count"] = len(sublists)
                 attributes["price_sublists_indices"] = indices
+                attributes["price_sublists_sums"] = calculate_sublist_sums(sublists)
                 # Convert indices to time ranges
                 time_ranges = convert_indices_to_time_ranges(indices)
                 attributes["price_sublists_time_ranges"] = time_ranges
@@ -295,6 +298,7 @@ class EMSBalconySolarSensor(EMSBalconySolarEntity, SensorEntity):
                 attributes["price_sublists"] = []
                 attributes["price_sublists_count"] = 0
                 attributes["price_sublists_indices"] = []
+                attributes["price_sublists_sums"] = []
                 attributes["price_sublists_time_ranges"] = []
                 attributes["hourly_prices"] = []
                 attributes["hourly_prices_count"] = 0
@@ -304,6 +308,7 @@ class EMSBalconySolarSensor(EMSBalconySolarEntity, SensorEntity):
             attributes["price_sublists"] = []
             attributes["price_sublists_count"] = 0
             attributes["price_sublists_indices"] = []
+            attributes["price_sublists_sums"] = []
             attributes["price_sublists_time_ranges"] = []
             attributes["hourly_prices"] = []
             attributes["hourly_prices_count"] = 0

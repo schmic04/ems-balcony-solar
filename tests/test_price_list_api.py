@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from custom_components.ems_balcony_solar.price_list_api import (
+    calculate_sublist_sums,
     convert_indices_to_time_ranges,
     get_combined_price_list,
     group_prices_by_hour,
@@ -82,6 +83,23 @@ def test_split_price_list_returns_matching_sublists_and_indices() -> None:
     for sublist, idx_list in zip(sublists, indices, strict=True):
         assert len(sublist) == len(idx_list)
         assert [PRICES_TODAY[i] for i in idx_list] == sublist
+
+
+def test_calculate_sublist_sums_matches_sublists() -> None:
+    """Sums are in the same order as the sublists and sorted descending."""
+    sublists, _ = split_price_list(PRICES_TODAY, SUBLIST_LENGTH, NUMBER_OF_SUBLISTS)
+    sums = calculate_sublist_sums(sublists)
+
+    assert len(sums) == len(sublists)
+    assert sums == sorted(sums, reverse=True)
+    for total, sublist in zip(sums, sublists, strict=True):
+        assert total == pytest.approx(sum(sublist), abs=1e-3)
+
+
+def test_calculate_sublist_sums_dict_format() -> None:
+    """Dict entries are summed by their value, non-numeric entries are ignored."""
+    sublists = [[{"value": 0.1}, {"value": 0.25}], [0.5, None, {"value": "x"}], []]
+    assert calculate_sublist_sums(sublists) == [0.35, 0.5, 0]
 
 
 def test_split_price_list_invalid_input() -> None:
