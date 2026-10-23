@@ -712,18 +712,41 @@ def _expand_backward(
     used_indices.add(idx)
 
 
+def _entry_value(entry: object) -> float | None:
+    """Return the price of a list entry (plain number or dict with value)."""
+    if isinstance(entry, dict):
+        entry = entry.get("value")
+    if isinstance(entry, (int, float)) and not isinstance(entry, bool):
+        return entry
+    return None
+
+
+def calculate_sublist_sums(sublists: list[list]) -> list[float]:
+    """
+    Calculate the sum of the prices of each sublist.
+
+    Works for plain number lists as well as lists of dicts with a value key.
+    Entries without a numeric price are ignored.
+    """
+    return [
+        round(
+            sum(v for v in map(_entry_value, sublist) if v is not None),
+            4,
+        )
+        for sublist in sublists
+    ]
+
+
 def _sort_and_select_sublists(
     sublists_data: list[tuple[list, list[int]]],
     number_of_sublists: int,
 ) -> tuple[list[list], list[list[int]]]:
     """Sort sublists by sum and select top ones."""
-    combined = []
-    for sublist, idx_list in sublists_data:
-        try:
-            total = sum(val for val in sublist if isinstance(val, (int, float)))
-        except (TypeError, ValueError):
-            total = 0
-        combined.append((total, sublist, idx_list))
+    totals = calculate_sublist_sums([sublist for sublist, _ in sublists_data])
+    combined = [
+        (total, sublist, idx_list)
+        for total, (sublist, idx_list) in zip(totals, sublists_data, strict=True)
+    ]
 
     combined.sort(key=lambda x: x[0], reverse=True)
     combined = combined[:number_of_sublists]
