@@ -11,6 +11,7 @@ import pytest
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
+from custom_components.ems_balcony_solar.binary_sensor import NO_DATA_TIMEOUT
 from custom_components.ems_balcony_solar.price_list_api import (
     convert_indices_to_time_ranges,
 )
@@ -105,6 +106,42 @@ async def test_missing_ranges_do_not_flip_state(
     state = hass.states.get(BINARY_SENSOR)
     assert state.state == "on"
     assert state.attributes["active_range"] == active[0][0]
+
+
+async def test_missing_data_turns_off_after_timeout(
+    hass: HomeAssistant, config_entry: MockConfigEntry
+) -> None:
+    """Data that stays missing for the whole timeout switches the sensor off."""
+    await _setup(hass, config_entry)
+    active, _, stamp = _ranges_around_now()
+    await _publish(hass, active, stamp)
+
+    hass.states.async_set(PRICE_SENSOR, "unavailable")
+    await hass.async_block_till_done()
+    await _advance(hass, 60)
+    assert hass.states.get(BINARY_SENSOR).state == "on"
+
+    timeout = int(NO_DATA_TIMEOUT.total_seconds())
+    await _advance(hass, timeout + 10)
+    # The off result still has to pass the regular hold time
+    await _advance(hass, timeout + 20)
+    assert hass.states.get(BINARY_SENSOR).state == "off"
+
+
+async def test_returning_data_cancels_timeout(
+    hass: HomeAssistant, config_entry: MockConfigEntry
+) -> None:
+    """Data coming back before the timeout keeps the sensor on."""
+    await _setup(hass, config_entry)
+    active, _, stamp = _ranges_around_now()
+    await _publish(hass, active, stamp)
+
+    hass.states.async_set(PRICE_SENSOR, "unavailable")
+    await hass.async_block_till_done()
+    await _publish(hass, active, stamp)
+    await _advance(hass, int(NO_DATA_TIMEOUT.total_seconds()) + 10)
+
+    assert hass.states.get(BINARY_SENSOR).state == "on"
 
 
 async def test_short_off_glitch_is_not_published(

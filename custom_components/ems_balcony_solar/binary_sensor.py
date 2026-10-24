@@ -37,6 +37,10 @@ _LOGGER = logging.getLogger(__name__)
 # must not toggle the state (and with it the automations) off and on again.
 OFF_HOLD_TIME = timedelta(seconds=2)
 
+# Missing price data (unavailable, unknown, no sensor) keeps the last result,
+# e.g. across a reload. If it persists for this long, the sensor switches off.
+NO_DATA_TIMEOUT = timedelta(minutes=5)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,  # noqa: ARG001
@@ -82,6 +86,8 @@ class EMSBalconySolarPriceRangeBinarySensor(EMSBalconySolarEntity, BinarySensorE
         }
         self._cancel_boundary_timer = None
         self._cancel_pending_off = None
+        self._cancel_no_data_timer = None
+        self._no_data_expired = False
         self._cancel_price_listener = None
         self._cancel_switch_listener = None
         self._switch_entity_id = None
@@ -123,6 +129,8 @@ class EMSBalconySolarPriceRangeBinarySensor(EMSBalconySolarEntity, BinarySensorE
             self._cancel_boundary_timer()
         if self._cancel_pending_off:
             self._cancel_pending_off()
+        if self._cancel_no_data_timer:
+            self._cancel_no_data_timer()
         if self._cancel_price_listener:
             self._cancel_price_listener()
         if self._cancel_switch_listener:
@@ -219,6 +227,7 @@ class EMSBalconySolarPriceRangeBinarySensor(EMSBalconySolarEntity, BinarySensorE
     def _update_state(self) -> None:
         """Update the state based on current time and price ranges."""
         if not self._is_switch_on():
+            self._reset_missing_data()
             self._set_inactive_state()
             return
 
@@ -227,11 +236,9 @@ class EMSBalconySolarPriceRangeBinarySensor(EMSBalconySolarEntity, BinarySensorE
             STATE_UNAVAILABLE,
             STATE_UNKNOWN,
         ):
-            # No data is not the same as no price range: keep the last result
-            self._attr_extra_state_attributes["last_check"] = (
-                datetime.now().astimezone().isoformat()
-            )
+            self._handle_missing_data()
             return
+        self._reset_missing_data()
 
         time_ranges, reference_date = self._get_time_ranges_and_reference()
         if not any(time_ranges):
@@ -239,6 +246,37 @@ class EMSBalconySolarPriceRangeBinarySensor(EMSBalconySolarEntity, BinarySensorE
             return
 
         self._process_time_ranges(time_ranges, reference_date)
+
+    def _handle_missing_data(self) -> None:
+        """Keep the last result while data is missing, but only for a while."""
+        if self._no_data_expired:
+            self._set_inactive_state()
+            return
+
+        if self._cancel_no_data_timer is None:
+            self._cancel_no_data_timer = async_call_later(
+                self.hass, NO_DATA_TIMEOUT, self._handle_no_data_timeout
+            )
+        self._attr_extra_state_attributes["last_check"] = (
+            datetime.now().astimezone().isoformat()
+        )
+
+    def _reset_missing_data(self) -> None:
+        """Forget about missing data, the price sensor delivers again."""
+        if self._cancel_no_data_timer:
+            self._cancel_no_data_timer()
+            self._cancel_no_data_timer = None
+        self._no_data_expired = False
+
+    @callback
+    def _handle_no_data_timeout(self, now: datetime) -> None:  # noqa: ARG002
+        """Give up on missing data and treat it as no active price range."""
+        _LOGGER.warning(
+            "No price data for %s, switching price range off", NO_DATA_TIMEOUT
+        )
+        self._cancel_no_data_timer = None
+        self._no_data_expired = True
+        self._refresh()
 
     def _set_inactive_state(self) -> None:
         """Set the binary sensor to inactive state with empty attributes."""
