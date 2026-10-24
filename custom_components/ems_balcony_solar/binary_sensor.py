@@ -11,10 +11,12 @@ from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
 )
+from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import Event, EventStateChangedData, callback
 from homeassistant.helpers.event import (
+    async_call_later,
+    async_track_point_in_time,
     async_track_state_change_event,
-    async_track_time_interval,
 )
 
 from .const import UNIQUE_ID_BINARY_SENSOR_PRICE_RANGE_ACTIVE
@@ -29,6 +31,11 @@ if TYPE_CHECKING:
     from .data import EMSBalconySolarConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
+
+# A switch to off is only published if it persists for this long. Re-evaluations
+# triggered by several updates of the price sensor within a few milliseconds
+# must not toggle the state (and with it the automations) off and on again.
+OFF_HOLD_TIME = timedelta(seconds=2)
 
 
 async def async_setup_entry(
@@ -62,15 +69,19 @@ class EMSBalconySolarPriceRangeBinarySensor(EMSBalconySolarEntity, BinarySensorE
         self._config_entry = config_entry
         self._attr_unique_id = UNIQUE_ID_BINARY_SENSOR_PRICE_RANGE_ACTIVE
         self._attr_name = "Price Range Active"
+        # _is_on is the computed result, _published_on the debounced state
         self._is_on = False
+        self._published_on = False
         self._active_range = None
         self._next_range = None
+        self._next_boundary: datetime | None = None
         self._attr_extra_state_attributes = {
             "active_range": None,
             "next_range": None,
             "last_check": None,
         }
-        self._cancel_time_listener = None
+        self._cancel_boundary_timer = None
+        self._cancel_pending_off = None
         self._cancel_price_listener = None
         self._cancel_switch_listener = None
         self._switch_entity_id = None
@@ -78,7 +89,7 @@ class EMSBalconySolarPriceRangeBinarySensor(EMSBalconySolarEntity, BinarySensorE
     @property
     def is_on(self) -> bool:
         """Return true if current time is in an active price range."""
-        return self._is_on
+        return self._published_on
 
     async def async_added_to_hass(self) -> None:
         """Run when entity about to be added to hass."""
@@ -86,6 +97,8 @@ class EMSBalconySolarPriceRangeBinarySensor(EMSBalconySolarEntity, BinarySensorE
 
         # Update immediately
         self._update_state()
+        self._published_on = self._is_on
+        self._schedule_next_boundary()
 
         # Track state changes of the Current Electricity Price sensor
         # This sensor has the price_sublists_time_ranges attribute
@@ -104,17 +117,12 @@ class EMSBalconySolarPriceRangeBinarySensor(EMSBalconySolarEntity, BinarySensorE
             self._handle_switch_change,
         )
 
-        # Update every minute
-        self._cancel_time_listener = async_track_time_interval(
-            self.hass,
-            self._handle_time_interval,
-            timedelta(minutes=1),
-        )
-
     async def async_will_remove_from_hass(self) -> None:
         """Run when entity will be removed from hass."""
-        if self._cancel_time_listener:
-            self._cancel_time_listener()
+        if self._cancel_boundary_timer:
+            self._cancel_boundary_timer()
+        if self._cancel_pending_off:
+            self._cancel_pending_off()
         if self._cancel_price_listener:
             self._cancel_price_listener()
         if self._cancel_switch_listener:
@@ -124,8 +132,7 @@ class EMSBalconySolarPriceRangeBinarySensor(EMSBalconySolarEntity, BinarySensorE
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        self._update_state()
-        self.async_write_ha_state()
+        self._refresh()
 
     @callback
     def _handle_price_sensor_change(
@@ -134,8 +141,7 @@ class EMSBalconySolarPriceRangeBinarySensor(EMSBalconySolarEntity, BinarySensorE
     ) -> None:
         """Handle price sensor state change."""
         _LOGGER.debug("Price sensor changed, updating price range binary sensor")
-        self._update_state()
-        self.async_write_ha_state()
+        self._refresh()
 
     @callback
     def _handle_switch_change(
@@ -144,14 +150,51 @@ class EMSBalconySolarPriceRangeBinarySensor(EMSBalconySolarEntity, BinarySensorE
     ) -> None:
         """Handle switch state change."""
         _LOGGER.debug("Switch changed, updating price range binary sensor")
-        self._update_state()
-        self.async_write_ha_state()
+        self._refresh()
 
     @callback
-    def _handle_time_interval(self, now: datetime) -> None:  # noqa: ARG002
-        """Handle time interval update."""
+    def _handle_boundary(self, now: datetime) -> None:  # noqa: ARG002
+        """Handle the start or end of a price range."""
+        self._cancel_boundary_timer = None
+        self._refresh()
+
+    @callback
+    def _handle_off_hold_elapsed(self, now: datetime) -> None:  # noqa: ARG002
+        """Publish the off state that persisted for the whole hold time."""
+        self._cancel_pending_off = None
         self._update_state()
+        self._published_on = self._is_on
+        self._schedule_next_boundary()
         self.async_write_ha_state()
+
+    def _refresh(self) -> None:
+        """Recompute the state and publish it, debouncing a switch to off."""
+        self._update_state()
+        self._schedule_next_boundary()
+
+        hold_off = self._published_on and not self._is_on and self._is_switch_on()
+        if hold_off:
+            if self._cancel_pending_off is None:
+                self._cancel_pending_off = async_call_later(
+                    self.hass, OFF_HOLD_TIME, self._handle_off_hold_elapsed
+                )
+        else:
+            if self._cancel_pending_off:
+                self._cancel_pending_off()
+                self._cancel_pending_off = None
+            self._published_on = self._is_on
+
+        self.async_write_ha_state()
+
+    def _schedule_next_boundary(self) -> None:
+        """Schedule a refresh for the next start or end of a price range."""
+        if self._cancel_boundary_timer:
+            self._cancel_boundary_timer()
+            self._cancel_boundary_timer = None
+        if self._next_boundary is not None:
+            self._cancel_boundary_timer = async_track_point_in_time(
+                self.hass, self._handle_boundary, self._next_boundary
+            )
 
     def _is_switch_on(self) -> bool:
         """
@@ -179,8 +222,19 @@ class EMSBalconySolarPriceRangeBinarySensor(EMSBalconySolarEntity, BinarySensorE
             self._set_inactive_state()
             return
 
+        price_state = self.hass.states.get("sensor.current_electricity_price")
+        if price_state is None or price_state.state in (
+            STATE_UNAVAILABLE,
+            STATE_UNKNOWN,
+        ):
+            # No data is not the same as no price range: keep the last result
+            self._attr_extra_state_attributes["last_check"] = (
+                datetime.now().astimezone().isoformat()
+            )
+            return
+
         time_ranges, reference_date = self._get_time_ranges_and_reference()
-        if not time_ranges:
+        if not any(time_ranges):
             self._set_inactive_state()
             return
 
@@ -191,6 +245,7 @@ class EMSBalconySolarPriceRangeBinarySensor(EMSBalconySolarEntity, BinarySensorE
         self._is_on = False
         self._active_range = None
         self._next_range = None
+        self._next_boundary = None
         self._attr_extra_state_attributes = {
             "active_range": None,
             "next_range": None,
@@ -233,6 +288,15 @@ class EMSBalconySolarPriceRangeBinarySensor(EMSBalconySolarEntity, BinarySensorE
 
         self._find_active_range(all_ranges_with_times, now)
         self._find_next_range(all_ranges_with_times, now)
+        self._next_boundary = min(
+            (
+                t
+                for _, start, end in all_ranges_with_times
+                for t in (start, end)
+                if t > now
+            ),
+            default=None,
+        )
 
         self._attr_extra_state_attributes = {
             "active_range": self._active_range,
